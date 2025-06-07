@@ -1,0 +1,5 @@
+requests
+pandas
+matplotlib
+pandas-ta
+numpy==1.26.4

@@ -1,0 +1,19 @@
+{
+ "long_score_threshold": 7.0,
+ "short_score_threshold": 7.0,
+ "sl_pct": 0.1596,
+ "tp_pct": 0.1191,
+ "use_dynamic_tp_sl": 0,
+ "w_cci": 1.0,
+ "w_donchian": 0.0,
+ "w_ema_cross": 0.0,
+ "w_macd": 0.0,
+ "w_mfi": 3.0,
+ "w_roc": 1.0,
+ "w_rsi": 0.0,
+ "w_stochrsi": 3.0,
+ "w_tema_cross": 0.0,
+ "w_trend": 1.0,
+ "w_volspike": 3.0,
+ "w_volume": 0.0
+}
