@@ -125,11 +125,10 @@ def _process_stop_loss(row, position_type, entry_price, position, balance, sl_pc
 
     return None, balance, position_type, position
 
-def _open_position(row, balance, leverage, position_type, fee):
+def _open_position(row, balance, leverage, position_size, fee):
     entry_price = row["close"]
-    position = (balance * leverage) / entry_price
-
-    actual_fee = position * entry_price * fee
+    position_value = position_size * entry_price
+    actual_fee = position_value * fee
     balance -= actual_fee
 
     indicators = {
@@ -145,10 +144,11 @@ def _open_position(row, balance, leverage, position_type, fee):
     }
 
     if row.get("long_entry"):
-        return ("OPEN LONG", row.name, entry_price, 0, indicators), balance, "long", position
+        return ("OPEN LONG", row.name, entry_price, 0, indicators), balance, "long", position_size
     elif row.get("short_entry"):
-        return ("OPEN SHORT", row.name, entry_price, 0, indicators), balance, "short", position
-    return None, balance, position_type, 0
+        return ("OPEN SHORT", row.name, entry_price, 0, indicators), balance, "short", position_size
+
+    return None, balance, None, 0
 
 def _close_position_by_signal(row, position_type, entry_price, position, balance, fee=0.00055):
     """Закрывает позицию по сигналу выхода (с учётом комиссии)"""
@@ -270,23 +270,37 @@ def _handle_active_position(state, row, tp_sl):
 
 
 def _try_open_position(state, row):
+    price = row['close']
+    balance = state['balance']
+    risk_pct = state.get('risk_pct', 0.01)
+    leverage = state['leverage']
+    sl_pct = state.get('sl_pct', 0.02)  # минимальная защита
+    fee = state['fee']
+
+    # 💡 Расчёт позиции через риск
+    risk_amount = balance * risk_pct
+    position_value = (risk_amount * leverage) / sl_pct
+    position_size = position_value / price
+
+    # Вызов с готовым объёмом позиции
     trade, new_balance, pos_type, pos = _open_position(
         row,
-        state['balance'],
-        state['leverage'],
-        state['position_type'],
-        state['fee']
+        balance,
+        leverage,
+        position_size,
+        fee
     )
     if trade:
         state.update({
             'balance': new_balance,
             'position_type': pos_type,
             'position': pos,
-            'entry_price': row['close']
+            'entry_price': price
         })
         state['trades'].append(trade)
         return True
     return False
+
 
 def _maybe_force_close(state, row):
     trade, new_balance, pos_type, pos = _close_position_by_signal(
@@ -372,7 +386,7 @@ def _save_and_report(df, state, symbol, initial_balance, result):
 
 def run_backtest(df, symbol=None, leverage=1.0, initial_balance=1000.0,
                  tp_pct=0.025, sl_pct=0.0175, use_dynamic_tp_sl=True,
-                 report=True, initial_state=None, finalize=True, risk_pct=0):
+                 report=True, initial_state=None, finalize=True, risk_pct=0.05):
     fee = 0.00055
     if initial_state:
         state = initial_state.copy()
@@ -386,16 +400,8 @@ def run_backtest(df, symbol=None, leverage=1.0, initial_balance=1000.0,
             'leverage': leverage,
             'fee': fee,
         }
-    fee = 0.00055
-    state = {
-        'balance': initial_balance,
-        'position': 0,
-        'entry_price': 0,
-        'position_type': None,
-        'trades': [],
-        'leverage': leverage,
-        'fee': fee,
-    }
+    state["risk_pct"] = risk_pct
+    state["sl_pct"] = sl_pct
 
     for index, row in df.iterrows():
         tp_sl = _prepare_tp_sl(row, state['entry_price'], tp_pct, sl_pct, use_dynamic_tp_sl)

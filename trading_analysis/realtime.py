@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 from trading_analysis.signals import generate_signals
-from trading_analysis.bybit_api import get_bybit_kline, periodically_update_history
+from trading_analysis.bybit_api import get_bybit_kline, update_hystory
 from trading_analysis.indicators import calculate_indicators
 from trading_analysis.db import (
     save_ohlcv_to_db,

@@ -6,8 +6,6 @@ from typing import Optional
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from trading_analysis.db import save_ohlcv_to_db
-
 bybit_client = HTTP(testnet=False)
 candle_buffer = {}
 
@@ -120,7 +118,7 @@ def get_bybit_kline(
     raw = fetch_bybit_kline_raw(symbol, interval, limit, start, end)
     return parse_kline_to_df(raw)
 
-async def periodically_update_history(symbol: str, interval_minutes: int = 30):
+async def update_hystory(symbol: str, interval_minutes: int = 30):
     while True:
         print(f"[TASK] Обновляем историю для {symbol}")
         df = get_bybit_kline(symbol, str(interval_minutes), limit=1000)
@@ -166,9 +164,3 @@ def find_first_kline_timestamp(symbol: str, interval: str = "30") -> int:
         return final_ts
     else:
         raise RuntimeError("❌ Не удалось найти первую свечу")
-
-def load_1000_df(symbol="PRIMEUSDT", interval="30", start_ts: Optional[int] = None):
-    if start_ts is None:
-        start_ts = find_first_kline_timestamp(symbol, interval)
-    df = get_bybit_kline(symbol=symbol, interval=interval, limit=1000, start=start_ts)
-    return df

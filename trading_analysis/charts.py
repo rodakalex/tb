@@ -67,3 +67,25 @@ def generate_all_charts(df):
     plot_rsi(df)
     plot_volume(df)
     plot_macd(df)
+
+
+def plot_backtest_progress(trade_log, title="Прогресс стратегии"):
+    if not trade_log:
+        print("❗ Нет сделок для построения графика.")
+        return
+
+    df_trades = pd.DataFrame(trade_log)
+    df_trades["date"] = pd.to_datetime(df_trades["date"])
+    df_trades = df_trades.sort_values("date")
+    df_trades["cumulative_pnl"] = df_trades["pnl"].cumsum()
+
+    plt.figure(figsize=(12, 5))
+    plt.plot(df_trades["date"], df_trades["cumulative_pnl"], marker="o", color="orange", label="Кумулятивный PnL")
+    plt.title(title)
+    plt.xlabel("Дата")
+    plt.ylabel("Кумулятивный PnL")
+    plt.grid(True)
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('charts/result.png')

@@ -18,6 +18,7 @@ Thumbs.db
 # Output directories
 charts/
 csv/
+best_params/
 
 # Database and logs
 *.db
