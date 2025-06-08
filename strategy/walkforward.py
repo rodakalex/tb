@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 import pandas as pd
-import matplotlib.pyplot as plt
 from hyperopt import fmin, tpe, Trials
 
-from trading_analysis.bybit_api import find_first_kline_timestamp, get_bybit_kline
+from trading_analysis.bybit_api import find_first_kline_timestamp
 from trading_analysis.db import load_ohlcv_from_db, save_model_run
 from trading_analysis.indicators import calculate_indicators
 from trading_analysis.signals import generate_signals
@@ -18,8 +17,8 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
     Инициализирует конфигурацию для walk-forward теста.
     Возвращает словарь с параметрами, необходимыми для основного цикла.
     """
-    window_size = 1500
-    step_candles = int(24 * 60 / int(interval))  # Например, 48 свечей = 1 день при 30m
+    window_size = 1000
+    step_candles = int(24 * 60 / int(interval))
     ms_per_candle = int(interval) * 60_000
     first_ts = find_first_kline_timestamp(symbol, interval)
     now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -118,23 +117,19 @@ def optimize_if_needed(df_train, symbol, search_space, best_params=None):
         fn=objective_with_df(df_train, symbol),
         space=search_space,
         algo=tpe.suggest,
-        max_evals=100,
+        max_evals=700,
         trials=trials,
     )
 
-    if trials.best_trial['result']['loss'] > 1000:
+    if trials.best_trial['result']['loss'] > -6:
         print("⚠️ Результат слабый — дооптимизируем ещё 200 попыток...")
         best_params = fmin(
             fn=objective_with_df(df_train, symbol),
             space=search_space,
             algo=tpe.suggest,
-            max_evals=300,
+            max_evals=1000,
             trials=trials,
         )
-
-    if trials.best_trial['result']['loss'] > 1000:
-        print("⚠️ Результат всё ещё слабый — пропускаем итерацию.")
-        return None  # можно будет проверить и пропустить день
 
     return best_params
 
@@ -162,9 +157,9 @@ def calculate_dynamic_risk(win_streak: int) -> float:
     :param win_streak: количество последовательных успешных дней
     :return: риск в долях (например, 0.05 = 5%)
     """
-    base_risk = 0.05  # минимальный риск — 5%
-    increment = 0.015  # прибавляется за каждую победу подряд
-    max_risk = 0.20    # ограничение на максимум
+    base_risk = 0.05
+    increment = 0.015
+    max_risk = 0.20
 
     risk = base_risk + win_streak * increment
     return min(risk, max_risk)
@@ -211,13 +206,11 @@ def update_tracking(config: dict, result: dict, df_test, df_test_prepared):
 
     test_date = df_test_prepared.index[0].to_pydatetime()
 
-    # Добавляем в лог сделок
     trade_log.append({
         "date": test_date.strftime("%Y-%m-%d"),
         "pnl": result["pnl"]
     })
 
-    # Сохраняем в БД
     save_model_run(
         symbol=symbol,
         date=test_date,
@@ -230,7 +223,6 @@ def update_tracking(config: dict, result: dict, df_test, df_test_prepared):
         retrained=retrained
     )
 
-    # Обновляем конфиг
     config["trade_log"] = trade_log
     config["days_elapsed"] = days_elapsed
 
@@ -251,14 +243,14 @@ def retrain(df_train, symbol, search_space, max_attempts: int = 2) -> tuple:
             fn=objective_with_df(df_train, symbol),
             space=search_space,
             algo=tpe.suggest,
-            max_evals=100 if attempt == 0 else 300,
+            max_evals=700 if attempt == 0 else 1000,
             trials=trials,
         )
         loss = trials.best_trial['result']['loss']
-        if loss < 1000:
+        if loss > -6:
             return best_params, 0
 
-    print("⚠️ Переобучение не дало хороших результатов.")
+    print("⚠️ Переобучение не дало хороших результатов :(")
     return best_params, 0
 
 def update_training_window(df_train, df_test, step_candles):
@@ -346,8 +338,8 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
             config["bad_days"] = 0
             config["win_streak"] += 1
 
-        if config["bad_days"] >= 3:
-            print("🔁 Три дня подряд убыточны — переобучение...")
+        if config["bad_days"] >= 2:
+            print("🔁 Два дня подряд убыточны — переобучение...")
             config["best_params"], config["win_streak"] = retrain(df_train, symbol, config["search_space"])
             config["bad_days"] = 0
 
