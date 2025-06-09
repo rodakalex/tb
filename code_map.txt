@@ -1,0 +1,527 @@
+
+File: trading_analysis/analyze.py
+  def load_model_runs_df()
+    calls → ModelRun.date.asc
+    calls → SessionLocal
+    calls → df.set_index
+    calls → df.sort_index
+    calls → isinstance
+    calls → json.loads
+    calls → pd.DataFrame
+    calls → pd.to_datetime
+    calls → print
+    calls → records.append
+    calls → session.close
+    calls → session.query
+    calls → session.query(ModelRun).order_by
+    calls → session.query(ModelRun).order_by(ModelRun.date.asc()).all
+
+File: trading_analysis/models.py
+  class Candle
+  class ModelRun
+
+File: trading_analysis/backtest.py
+  def plot_trades()
+    calls → dict
+    calls → fig.add_trace
+    calls → fig.update_layout
+    calls → fig.write_html
+    calls → go.Candlestick
+    calls → go.Figure
+    calls → go.Scatter
+    calls → len
+    calls → print
+  def _process_take_profit()
+    calls → row.get
+  def _process_stop_loss()
+    calls → row.get
+  def _open_position()
+    calls → row.get
+  def _close_position_by_signal()
+    calls → row.get
+  def analyze_backtest()
+    calls → abs
+    calls → isinstance
+    calls → len
+    calls → sum
+  def _print_backtest_results()
+    calls → len
+    calls → min
+    calls → print
+    calls → sum
+  def _prepare_tp_sl()
+  def _handle_active_position()
+    calls → func
+    calls → state.update
+    calls → state['trades'].append
+  def _try_open_position()
+    calls → _open_position
+    calls → print
+    calls → state.get
+    calls → state.update
+    calls → state['trades'].append
+  def _maybe_force_close()
+    calls → _close_position_by_signal
+    calls → state.update
+    calls → state['trades'].append
+  def _finalize_position()
+    calls → state.update
+    calls → state['trades'].append
+  def _save_to_csv()
+    calls → Path
+    calls → Path(output_dir).mkdir
+    calls → ast.literal_eval
+    calls → df.to_csv
+    calls → indicators.get
+    calls → isinstance
+    calls → len
+    calls → pd.DataFrame
+    calls → rows.append
+  def _save_and_report()
+    calls → _print_backtest_results
+    calls → _save_to_csv
+    calls → plot_trades
+  def run_backtest()
+    calls → _finalize_position
+    calls → _handle_active_position
+    calls → _maybe_force_close
+    calls → _prepare_tp_sl
+    calls → _save_and_report
+    calls → _try_open_position
+    calls → analyze_backtest
+    calls → df.iterrows
+    calls → initial_state.copy
+  def plot_equity_curve()
+    calls → equity.append
+    calls → equity_df.to_csv
+    calls → len
+    calls → pd.DataFrame
+    calls → plt.figure
+    calls → plt.grid
+    calls → plt.plot
+    calls → plt.savefig
+    calls → plt.tight_layout
+    calls → plt.title
+    calls → plt.xlabel
+    calls → plt.ylabel
+    calls → timestamps.append
+
+File: trading_analysis/bybit_api.py
+  def get_bybit_trading_symbols()
+    calls → print
+    calls → requests.get
+    calls → response.json
+    calls → response.raise_for_status
+  def fetch_bybit_kline_raw()
+    calls → RuntimeError
+    calls → ValueError
+    calls → bybit_client.get_kline
+  def parse_kline_to_df()
+    calls → df.astype
+    calls → df.set_index
+    calls → df.sort_index
+    calls → df['timestamp'].astype
+    calls → pd.DataFrame
+    calls → pd.to_datetime
+  def get_bybit_kline()
+    calls → fetch_bybit_kline_raw
+    calls → parse_kline_to_df
+  def find_first_kline_timestamp()
+    calls → RuntimeError
+    calls → datetime.fromtimestamp
+    calls → datetime.now
+    calls → fetch_bybit_kline_raw
+    calls → int
+    calls → print
+    calls → timedelta
+    calls → ts.strftime
+    calls → ts.timestamp
+
+File: trading_analysis/executor.py
+  def place_order()
+    calls → client.place_order
+    calls → print
+
+File: trading_analysis/signals.py
+  def safe_assign()
+    calls → series.astype
+  def generate_signals()
+    calls → (df['MACD'] < df['Signal']) & (df['MACD'].shift(1) >= df['Signal'].shift(1)) & (df['MACD'] < 0) & (df['Signal'] < 0).astype
+    calls → (df['MACD'] > df['Signal']) & (df['MACD'].shift(1) <= df['Signal'].shift(1)) & (df['MACD'] > 0).astype
+    calls → (df['RSI'] > 45) & (df['RSI'] < 75).astype
+    calls → df.copy
+    calls → df['BBP'] > 0.5.astype
+    calls → df['EMA_200'].diff
+    calls → df['EMA_200'].diff() < 0.astype
+    calls → df['EMA_9'] < df['EMA_21'].astype
+    calls → df['EMA_9'] > df['EMA_21'].astype
+    calls → df['MACD'].shift
+    calls → df['RSI'] < 50.astype
+    calls → df['Signal'].shift
+    calls → df['atr'] > df['atr'].rolling(50).mean().astype
+    calls → df['atr'].rolling
+    calls → df['atr'].rolling(50).mean
+    calls → df['close'] < df['EMA_200'].astype
+    calls → df['close'] < df['EMA_9'].astype
+    calls → df['close'] > df['BBM'].astype
+    calls → df['close'] > df['EMA_200'].astype
+    calls → df['volume'] > df['Volume_SMA_20'].astype
+    calls → df['volume'] > df['volume'].rolling(10).max().shift(1).astype
+    calls → df['volume'].rolling
+    calls → df['volume'].rolling(10).max
+    calls → df['volume'].rolling(10).max().shift
+    calls → ta.atr
+  def generate_signals()
+    calls → (df['MACD'] < df['Signal']) & (df['MACD'].shift(1) >= df['Signal'].shift(1)) & (df['MACD'] < 0) & (df['Signal'] < 0).astype
+    calls → (df['MACD'] > df['Signal']) & (df['MACD'].shift(1) <= df['Signal'].shift(1)) & (df['MACD'] > 0).astype
+    calls → (df['RSI'] > 45) & (df['RSI'] < 75).astype
+    calls → (df['StochRSI_K'] < 20) & (df['StochRSI_K'] > df['StochRSI_D']).astype
+    calls → (df['StochRSI_K'] > 80) & (df['StochRSI_K'] < df['StochRSI_D']).astype
+    calls → (df['volume'] - df['volume'].rolling(20).mean()) / df['volume'].rolling(20).std().fillna
+    calls → df.copy
+    calls → df['ADX'] > 20.astype
+    calls → df['ATR'] > df['ATR'].rolling(50).mean().astype
+    calls → df['ATR'].rolling
+    calls → df['ATR'].rolling(50).mean
+    calls → df['BBP'] > 0.5.astype
+    calls → df['CCI'] < -100.astype
+    calls → df['CCI'] > 100.astype
+    calls → df['EMA_200'].diff
+    calls → df['EMA_200'].diff() < 0.astype
+    calls → df['EMA_9'] < df['EMA_21'].astype
+    calls → df['EMA_9'] > df['EMA_21'].astype
+    calls → df['MACD'].shift
+    calls → df['MFI'] < 30.astype
+    calls → df['MFI'] > 70.astype
+    calls → df['ROC'] < -1.astype
+    calls → df['ROC'] > 1.astype
+    calls → df['RSI'] < 50.astype
+    calls → df['Signal'].shift
+    calls → df['TEMA_9'] < df['TEMA_21'].astype
+    calls → df['TEMA_9'] > df['TEMA_21'].astype
+    calls → df['close'] < df['EMA_200'].astype
+    calls → df['close'] < df['EMA_9'].astype
+    calls → df['close'] < donchian_low.shift(1).astype
+    calls → df['close'] > df['BBM'].astype
+    calls → df['close'] > df['EMA_200'].astype
+    calls → df['close'] > donchian_high.shift(1).astype
+    calls → df['high'].rolling
+    calls → df['high'].rolling(window=20).max
+    calls → df['low'].rolling
+    calls → df['low'].rolling(window=20).min
+    calls → df['volume'] > df['Volume_SMA_20'].astype
+    calls → df['volume'] > df['volume'].rolling(10).max().shift(1).astype
+    calls → df['volume'].rolling
+    calls → df['volume'].rolling(10).max
+    calls → df['volume'].rolling(10).max().shift
+    calls → df['volume'].rolling(20).mean
+    calls → df['volume'].rolling(20).std
+    calls → df['volume_zscore'] > 2.astype
+    calls → donchian_high.shift
+    calls → donchian_low.shift
+    calls → p
+    calls → params.get
+    calls → ta.adx
+    calls → ta.atr
+    calls → ta.cci
+    calls → ta.mfi
+    calls → ta.roc
+    calls → ta.stochrsi
+    calls → ta.tema
+    calls → warnings.catch_warnings
+    calls → warnings.simplefilter
+
+File: trading_analysis/indicators.py
+  def safe_assign_ema()
+    calls → df.ta.ema
+    calls → isinstance
+  def calculate_indicators()
+    calls → df.astype
+    calls → df.ta.atr
+    calls → df.ta.bbands
+    calls → df.ta.macd
+    calls → df.ta.rsi
+    calls → df['volume'].rolling
+    calls → df['volume'].rolling(window=20, min_periods=1).mean
+    calls → pd.concat
+    calls → safe_assign_ema
+
+File: trading_analysis/websocket_kline.py
+
+File: trading_analysis/db.py
+  def init_db()
+    calls → Base.metadata.create_all
+  def save_ohlcv_to_db()
+    calls → Candle
+    calls → Candle.timestamp.in_
+    calls → SessionLocal
+    calls → df.copy
+    calls → df.copy().reset_index
+    calls → df['timestamp'].astype
+    calls → df['timestamp'].isin
+    calls → df['timestamp'].tolist
+    calls → int
+    calls → len
+    calls → new_rows.iterrows
+    calls → print
+    calls → session.bulk_save_objects
+    calls → session.close
+    calls → session.commit
+    calls → session.query
+    calls → session.query(Candle.timestamp).filter
+    calls → session.query(Candle.timestamp).filter(Candle.symbol == symbol).filter
+    calls → session.query(Candle.timestamp).filter(Candle.symbol == symbol).filter(Candle.interval == interval).filter
+    calls → session.query(Candle.timestamp).filter(Candle.symbol == symbol).filter(Candle.interval == interval).filter(Candle.timestamp.in_(df['timestamp'].tolist())).all
+    calls → set
+  def load_ohlcv_from_db()
+    calls → Candle.timestamp.asc
+    calls → SessionLocal
+    calls → ValueError
+    calls → df.set_index
+    calls → pd.DataFrame
+    calls → pd.to_datetime
+    calls → select
+    calls → select(Candle).where
+    calls → session.close
+    calls → session.execute
+    calls → session.execute(stmt).scalars
+    calls → session.execute(stmt).scalars().all
+    calls → stmt.limit
+    calls → stmt.order_by
+    calls → stmt.where
+  def get_latest_timestamp()
+    calls → SessionLocal
+    calls → func.max
+    calls → session.close
+    calls → session.query
+    calls → session.query(func.max(Candle.timestamp)).filter
+    calls → session.query(func.max(Candle.timestamp)).filter(Candle.symbol == symbol).scalar
+  def fetch_and_save_all_ohlcv()
+    calls → datetime.now
+    calls → datetime.now(timezone.utc).timestamp
+    calls → df.index[-1].timestamp
+    calls → find_first_kline_timestamp
+    calls → get_bybit_kline
+    calls → int
+    calls → len
+    calls → print
+    calls → save_ohlcv_to_db
+    calls → time.sleep
+  def interval_to_timedelta()
+    calls → ValueError
+    calls → int
+    calls → interval.isdigit
+    calls → timedelta
+  def check_ohlcv_integrity()
+    calls → df.index.to_list
+    calls → int
+    calls → interval_to_timedelta
+    calls → len
+    calls → load_ohlcv_from_db
+    calls → missing_timestamps.append
+    calls → print
+    calls → range
+    calls → zip
+  def convert_np()
+    calls → convert_np
+    calls → isinstance
+    calls → obj.item
+    calls → obj.items
+  def save_model_run()
+    calls → ModelRun
+    calls → SessionLocal
+    calls → convert_np
+    calls → json.dumps
+    calls → session.add
+    calls → session.close
+    calls → session.commit
+
+File: trading_analysis/charts.py
+  def plot_volume()
+    calls → df.copy
+    calls → df['volume'].quantile
+    calls → pd.to_numeric
+    calls → plt.bar
+    calls → plt.figure
+    calls → plt.grid
+    calls → plt.legend
+    calls → plt.plot
+    calls → plt.savefig
+    calls → plt.tight_layout
+    calls → plt.title
+    calls → plt.ylim
+    calls → zip
+  def plot_macd()
+    calls → df['MACD'].shift
+    calls → df['Signal'].shift
+    calls → plt.axhline
+    calls → plt.bar
+    calls → plt.figure
+    calls → plt.grid
+    calls → plt.legend
+    calls → plt.plot
+    calls → plt.savefig
+    calls → plt.tight_layout
+    calls → plt.title
+  def plot_rsi()
+    calls → plt.axhline
+    calls → plt.figure
+    calls → plt.grid
+    calls → plt.legend
+    calls → plt.plot
+    calls → plt.savefig
+    calls → plt.tight_layout
+    calls → plt.title
+  def plot_price_with_ema_bb()
+    calls → plt.figure
+    calls → plt.fill_between
+    calls → plt.grid
+    calls → plt.legend
+    calls → plt.plot
+    calls → plt.savefig
+    calls → plt.tight_layout
+    calls → plt.title
+  def generate_all_charts()
+    calls → plot_macd
+    calls → plot_price_with_ema_bb
+    calls → plot_rsi
+    calls → plot_volume
+  def plot_backtest_progress()
+    calls → df_trades.sort_values
+    calls → df_trades['pnl'].cumsum
+    calls → pd.DataFrame
+    calls → pd.to_datetime
+    calls → plt.figure
+    calls → plt.grid
+    calls → plt.legend
+    calls → plt.plot
+    calls → plt.savefig
+    calls → plt.tight_layout
+    calls → plt.title
+    calls → plt.xlabel
+    calls → plt.xticks
+    calls → plt.ylabel
+    calls → print
+
+File: trading_analysis/utils.py
+  def strip_indicators()
+    calls → df.drop
+  def should_update_data()
+    calls → datetime.fromtimestamp
+    calls → datetime.now
+    calls → timedelta
+
+File: trading_analysis/realtime.py
+  def update_live_kline()
+    calls → float
+    calls → int
+    calls → kline_buffer[symbol].append
+    calls → kline_buffer[symbol].clear
+    calls → pd.to_datetime
+  def get_live_kline()
+  def merge_live_candle()
+    calls → datetime.now
+    calls → df.index.tz_localize
+    calls → pd.DataFrame
+    calls → pd.concat
+    calls → pd.concat([df, row]).sort_index
+    calls → print
+    calls → timedelta
+  def load_best_params()
+    calls → Path
+    calls → json.load
+    calls → open
+    calls → path.exists
+  def run_analysis_for_symbol()
+    calls → calculate_indicators
+    calls → generate_signals
+    calls → get_bybit_kline
+    calls → get_latest_timestamp
+    calls → get_live_kline
+    calls → load_best_params
+    calls → load_ohlcv_from_db
+    calls → merge_live_candle
+    calls → print
+    calls → save_ohlcv_to_db
+
+File: strategy/objective.py
+  def objective_with_df()
+    calls → calculate_indicators
+    calls → df_outer.copy
+    calls → generate_signals
+    calls → run_backtest
+    calls → strip_indicators
+
+File: strategy/search_space.py
+
+File: strategy/walkforward.py
+  def initialize_test()
+    calls → datetime.now
+    calls → datetime.now(timezone.utc).timestamp
+    calls → find_first_kline_timestamp
+    calls → int
+  def load_initial_train_data()
+    calls → load_ohlcv_from_db
+  def is_end_of_data()
+    calls → datetime.now
+    calls → datetime.now(timezone.utc).timestamp
+    calls → int
+  def calculate_test_range()
+    calls → df_train.index[-1].timestamp
+    calls → int
+  def load_test_window_from_db()
+    calls → load_ohlcv_from_db
+    calls → print
+  def optimize_if_needed()
+    calls → Trials
+    calls → fmin
+    calls → objective_with_df
+    calls → print
+  def prepare_test_data()
+    calls → calculate_indicators
+    calls → generate_signals
+    calls → len
+    calls → pd.concat
+  def calculate_dynamic_risk()
+    calls → min
+  def run_evaluation()
+    calls → run_backtest
+  def update_tracking()
+    calls → config.get
+    calls → df_test_prepared.index[0].to_pydatetime
+    calls → result.get
+    calls → save_model_run
+    calls → test_date.strftime
+    calls → trade_log.append
+  def retrain()
+    calls → Trials
+    calls → fmin
+    calls → objective_with_df
+    calls → print
+    calls → range
+  def update_training_window()
+    calls → pd.concat
+  def finalize_walkforward()
+    calls → len
+    calls → max
+    calls → min
+    calls → plot_backtest_progress
+    calls → print
+    calls → sum
+  def walk_forward_test()
+    calls → calculate_dynamic_risk
+    calls → calculate_test_range
+    calls → config.get
+    calls → finalize_walkforward
+    calls → initialize_test
+    calls → is_end_of_data
+    calls → load_initial_train_data
+    calls → load_test_window_from_db
+    calls → optimize_if_needed
+    calls → plot_backtest_progress
+    calls → prepare_test_data
+    calls → print
+    calls → retrain
+    calls → run_evaluation
+    calls → update_tracking
+    calls → update_training_window

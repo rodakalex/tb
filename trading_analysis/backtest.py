@@ -280,7 +280,6 @@ def _try_open_position(state, row):
     risk_amount = balance * risk_pct
     position_value = (risk_amount * leverage) / sl_pct
     position_size = position_value / price
-    print(f"[OPEN] balance={balance:.2f} | risk_amt={risk_amount:.2f} | sl_pct={sl_pct:.4f} | size={position_size:.4f} | pos_val={position_value:.2f}")
 
     trade, new_balance, pos_type, pos = _open_position(
         row,

@@ -1,6 +1,5 @@
-from trading_analysis.db import check_ohlcv_integrity, fetch_and_save_all_ohlcv, init_db
+from trading_analysis.db import init_db
 from strategy.walkforward import walk_forward_test
-
 
 def run_realtime():
     from trading_analysis.bybit_api import update_hystory

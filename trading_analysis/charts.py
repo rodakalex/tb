@@ -69,7 +69,7 @@ def generate_all_charts(df):
     plot_macd(df)
 
 
-def plot_backtest_progress(trade_log, title="Прогресс стратегии"):
+def plot_backtest_progress(trade_log, title="Прогресс стратегии", starting_balance=1000.0):
     if not trade_log:
         print("❗ Нет сделок для построения графика.")
         return
@@ -77,13 +77,18 @@ def plot_backtest_progress(trade_log, title="Прогресс стратегии
     df_trades = pd.DataFrame(trade_log)
     df_trades["date"] = pd.to_datetime(df_trades["date"])
     df_trades = df_trades.sort_values("date")
+    
+    # Кумулятивный PnL
     df_trades["cumulative_pnl"] = df_trades["pnl"].cumsum()
+    
+    # Кумулятивный баланс (equity)
+    df_trades["equity"] = starting_balance + df_trades["cumulative_pnl"]
 
     plt.figure(figsize=(12, 5))
-    plt.plot(df_trades["date"], df_trades["cumulative_pnl"], marker="o", color="orange", label="Кумулятивный PnL")
+    plt.plot(df_trades["date"], df_trades["equity"], marker="o", color="orange", label="Баланс (Equity)")
     plt.title(title)
     plt.xlabel("Дата")
-    plt.ylabel("Кумулятивный PnL")
+    plt.ylabel("Баланс")
     plt.grid(True)
     plt.xticks(rotation=45)
     plt.legend()

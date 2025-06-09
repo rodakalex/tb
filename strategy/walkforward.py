@@ -9,7 +9,7 @@ from trading_analysis.signals import generate_signals
 from trading_analysis.backtest import run_backtest
 from trading_analysis.charts import plot_backtest_progress
 
-from strategy.objective import objective_with_df
+from strategy.objective import estimate_window_size_from_params, objective_with_df
 from strategy.search_space import search_space
 
 def initialize_test(symbol: str, interval: str = "30") -> dict:
@@ -17,7 +17,6 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
     Инициализирует конфигурацию для walk-forward теста.
     Возвращает словарь с параметрами, необходимыми для основного цикла.
     """
-    window_size = 1000
     step_candles = int(24 * 60 / int(interval))
     ms_per_candle = int(interval) * 60_000
     first_ts = find_first_kline_timestamp(symbol, interval)
@@ -26,7 +25,7 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
     return {
         "symbol": symbol,
         "interval": interval,
-        "window_size": window_size,
+        "window_size": 1000,
         "step_candles": step_candles,
         "ms_per_candle": ms_per_candle,
         "first_ts": first_ts,
@@ -103,13 +102,11 @@ def load_test_window_from_db(symbol: str, interval: str, test_range: tuple) -> p
 
     return df
 
-def optimize_if_needed(df_train, symbol, search_space, best_params=None):
+def optimize(df_train, symbol, search_space):
     """
-    Выполняет оптимизацию параметров, если они ещё не заданы.
+    Выполняет оптимизацию параметров
     Возвращает лучшие параметры.
     """
-    if best_params is not None:
-        return best_params
 
     print(f"\n🔍 Первая оптимизация на данных до {df_train.index[-1]}")
     trials = Trials()
@@ -117,17 +114,17 @@ def optimize_if_needed(df_train, symbol, search_space, best_params=None):
         fn=objective_with_df(df_train, symbol),
         space=search_space,
         algo=tpe.suggest,
-        max_evals=700,
+        max_evals=100,
         trials=trials,
     )
 
-    if trials.best_trial['result']['loss'] > -6:
-        print("⚠️ Результат слабый — дооптимизируем ещё 200 попыток...")
+    if trials.best_trial['result']['loss'] > -2:
+        print("⚠️ Результат слабый — дооптимизируем ещё до 200 попыток...")
         best_params = fmin(
             fn=objective_with_df(df_train, symbol),
             space=search_space,
             algo=tpe.suggest,
-            max_evals=1000,
+            max_evals=200,
             trials=trials,
         )
 
@@ -226,47 +223,23 @@ def update_tracking(config: dict, result: dict, df_test, df_test_prepared):
     config["trade_log"] = trade_log
     config["days_elapsed"] = days_elapsed
 
-def retrain(df_train, symbol, search_space, max_attempts: int = 2) -> tuple:
-    """
-    Повторно обучает модель при плохом результате.
-    
-    :param df_train: обучающий DataFrame
-    :param symbol: тикер инструмента
-    :param search_space: пространство поиска гиперпараметров
-    :param max_attempts: сколько раз пробовать, если результат плохой
-    :return: кортеж (best_params, win_streak=0)
-    """
-    for attempt in range(max_attempts):
-        print(f"🔁 Переобучение (попытка {attempt + 1}/{max_attempts})...")
-        trials = Trials()
-        best_params = fmin(
-            fn=objective_with_df(df_train, symbol),
-            space=search_space,
-            algo=tpe.suggest,
-            max_evals=700 if attempt == 0 else 1000,
-            trials=trials,
-        )
-        loss = trials.best_trial['result']['loss']
-        if loss > -6:
-            return best_params, 0
-
-    print("⚠️ Переобучение не дало хороших результатов :(")
-    return best_params, 0
-
 def update_training_window(df_train, df_test, step_candles):
     """
-    Обновляет обучающее окно, сдвигая его и добавляя новые свечи из df_test.
-
-    :param df_train: текущий обучающий DataFrame
-    :param df_test: тестовый DataFrame
-    :param step_candles: сколько свечей сдвинуть
-    :return: обновлённый df_train
+    Обновляет обучающее окно, гарантируя отсутствие пересечений с df_test.
     """
+    print("🧪 Текущий конец df_train:", df_train.index[-1])
+    print("🧪 Начало df_test:", df_test.index[0])
+
     base_cols = ["open", "high", "low", "close", "volume"]
     df_test_clean = df_test[base_cols]
 
-    df_train_updated = pd.concat([df_train.iloc[step_candles:], df_test_clean])
+    # Удаляем все строки в df_train, которые перекрываются по времени с df_test
+    df_train_filtered = df_train[df_train.index < df_test.index[0]]
+
+    df_train_updated = pd.concat([df_train_filtered, df_test_clean])
+
     return df_train_updated
+
 
 def finalize_walkforward(config):
     """
@@ -311,15 +284,20 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         if is_end_of_data(test_end_ts):
             break
 
-        df_test = load_test_window_from_db(symbol, interval, test_range)  # ⬅️ ЭТА СТРОКА НУЖНА!
+        df_test = load_test_window_from_db(symbol, interval, test_range)
         if df_test is None or df_test.empty:
             print("⚠ Недостаточно тестовых данных в БД.")
             break
 
         if config.get("best_params") is None:
-            print(f"🔍 Первая оптимизация на данных до {df_train.index[-1]}")
-            config["best_params"] = optimize_if_needed(df_train, symbol, config["search_space"])
+            config["best_params"] = optimize(df_train, symbol, config["search_space"])
         best_params = config["best_params"]
+
+        config["window_size"] = estimate_window_size_from_params(config["best_params"])
+        print(f"📈 Используемые индикаторы:")
+        for k, v in config["best_params"].items():
+            if k.startswith("w_") and v > 0:
+                print(f"  - {k[2:]}: вес {v}")
 
         df_test_prepared = prepare_test_data(df_train, df_test, best_params)
         risk_pct = calculate_dynamic_risk(config["win_streak"])
@@ -340,9 +318,11 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
 
         if config["bad_days"] >= 2:
             print("🔁 Два дня подряд убыточны — переобучение...")
-            config["best_params"], config["win_streak"] = retrain(df_train, symbol, config["search_space"])
-            config["bad_days"] = 0
+            config["best_params"]= optimize(df_train, symbol, config["search_space"])
+            config["bad_days"] = config["win_streak"]  = 0
 
         df_train = update_training_window(df_train, df_test, config["step_candles"])
+        if "window_size" in config and config["window_size"]:
+            df_train = df_train.iloc[-config["window_size"]:]
 
     finalize_walkforward(config)
