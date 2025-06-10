@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from pathlib import Path
 
+from trading_analysis.risk import calculate_position_size, calculate_sl_pct_from_atr
+
 def plot_trades(df, trades, symbol="SYMBOL"):
     fig = go.Figure()
     fig.add_trace(go.Candlestick(
@@ -103,7 +105,7 @@ def _process_stop_loss(row, position_type, entry_price, position, balance, sl_pc
         "ATR": row.get("atr"),
     }
 
-    sl_pct = row['ATR'] * 1.2 / entry_price
+    sl_pct = calculate_sl_pct_from_atr(row.get('ATR'), entry_price, multiplier=1.2)
 
     if position_type == "long":
         sl_price = entry_price * (1 - sl_pct)
@@ -236,10 +238,13 @@ def _print_backtest_results(trades, final_balance, symbol, result):
 
 def _prepare_tp_sl(row, entry_price, fallback_tp, fallback_sl, dynamic):
     if dynamic and row["ATR"] > 0 and entry_price > 0:
+        sl_pct = calculate_sl_pct_from_atr(row["ATR"], entry_price, multiplier=1.2)
+        tp_pct = calculate_sl_pct_from_atr(row["ATR"], entry_price, multiplier=2.0)
         return {
-            'tp': row["ATR"] * 2 / entry_price,
-            'sl': row["ATR"] * 1.2 / entry_price
+            'tp': tp_pct,
+            'sl': sl_pct
         }
+
     return {'tp': fallback_tp, 'sl': fallback_sl}
 
 def _handle_active_position(state, row, tp_sl):
@@ -277,9 +282,7 @@ def _try_open_position(state, row):
     sl_pct = state.get('sl_pct', 0.02)
     fee = state['fee']
 
-    risk_amount = balance * risk_pct
-    position_value = (risk_amount * leverage) / sl_pct
-    position_size = position_value / price
+    position_size = calculate_position_size(balance, risk_pct, leverage, sl_pct, price)
 
     trade, new_balance, pos_type, pos = _open_position(
         row,

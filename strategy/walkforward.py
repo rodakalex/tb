@@ -2,15 +2,16 @@ from datetime import datetime, timezone
 import pandas as pd
 from hyperopt import fmin, tpe, Trials
 
-from trading_analysis.bybit_api import find_first_kline_timestamp
-from trading_analysis.db import load_ohlcv_from_db, save_model_run
+from trading_analysis.db import get_first_candle_from_db, load_ohlcv_from_db, save_model_run
 from trading_analysis.indicators import calculate_indicators
+from trading_analysis.risk import calculate_inverse_balance_risk
 from trading_analysis.signals import generate_signals
 from trading_analysis.backtest import run_backtest
 from trading_analysis.charts import plot_backtest_progress
 
-from strategy.objective import estimate_window_size_from_params, objective_with_df
+from strategy.objective import estimate_window_size_from_params, optimize_with_validation
 from strategy.search_space import search_space
+from trading_analysis.utils import check_split, split_train_val_test
 
 def initialize_test(symbol: str, interval: str = "30") -> dict:
     """
@@ -19,13 +20,14 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
     """
     step_candles = int(24 * 60 / int(interval))
     ms_per_candle = int(interval) * 60_000
-    first_ts = find_first_kline_timestamp(symbol, interval)
+    last_candle = get_first_candle_from_db(symbol, interval)
+    first_ts = int(last_candle.timestamp.timestamp() * 1000)
     now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
 
     return {
         "symbol": symbol,
         "interval": interval,
-        "window_size": 1000,
+        "window_size": 2000,
         "step_candles": step_candles,
         "ms_per_candle": ms_per_candle,
         "first_ts": first_ts,
@@ -102,34 +104,6 @@ def load_test_window_from_db(symbol: str, interval: str, test_range: tuple) -> p
 
     return df
 
-def optimize(df_train, symbol, search_space):
-    """
-    Выполняет оптимизацию параметров
-    Возвращает лучшие параметры.
-    """
-
-    print(f"\n🔍 Первая оптимизация на данных до {df_train.index[-1]}")
-    trials = Trials()
-    best_params = fmin(
-        fn=objective_with_df(df_train, symbol),
-        space=search_space,
-        algo=tpe.suggest,
-        max_evals=100,
-        trials=trials,
-    )
-
-    if trials.best_trial['result']['loss'] > -2:
-        print("⚠️ Результат слабый — дооптимизируем ещё до 200 попыток...")
-        best_params = fmin(
-            fn=objective_with_df(df_train, symbol),
-            space=search_space,
-            algo=tpe.suggest,
-            max_evals=200,
-            trials=trials,
-        )
-
-    return best_params
-
 def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params: dict) -> pd.DataFrame:
     """
     Объединяет тренировочные и тестовые данные, применяет индикаторы и сигналы,
@@ -146,20 +120,6 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
 
     # Возвращаем только тестовую часть, по длине df_test
     return df_full.iloc[-len(df_test):]
-
-def calculate_dynamic_risk(win_streak: int) -> float:
-    """
-    Вычисляет процент риска на сделку в зависимости от текущей серии побед.
-
-    :param win_streak: количество последовательных успешных дней
-    :return: риск в долях (например, 0.05 = 5%)
-    """
-    base_risk = 0.05
-    increment = 0.015
-    max_risk = 0.20
-
-    risk = base_risk + win_streak * increment
-    return min(risk, max_risk)
 
 def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_pct: float) -> tuple:
     """
@@ -274,7 +234,7 @@ def finalize_walkforward(config):
 
 def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
     config = initialize_test(symbol, interval)
-    df_train = load_initial_train_data(symbol, config["window_size"], config["first_ts"], interval=interval)
+    df_train = load_initial_train_data(symbol=symbol, window_size=config["window_size"], start_timestamp=config["first_ts"], interval=interval)
     config['bad_days'] = 0
 
     while True:
@@ -288,9 +248,19 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         if df_test is None or df_test.empty:
             print("⚠ Недостаточно тестовых данных в БД.")
             break
-
+        
+        df_train_raw, df_val_raw, test = split_train_val_test(df_train)
+        check_split(df_train_raw, df_val_raw, test)
         if config.get("best_params") is None:
-            config["best_params"] = optimize(df_train, symbol, config["search_space"])
+            config["best_params"] = optimize_with_validation(
+                                                df_train,
+                                                df_val_raw,
+                                                symbol=symbol,
+                                                search_space=search_space,
+                                                target_loss=7.5,
+                                                max_rounds=5,
+                                                initial_params=config["best_params"]
+                                            )
         best_params = config["best_params"]
 
         config["window_size"] = estimate_window_size_from_params(config["best_params"])
@@ -300,7 +270,10 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
                 print(f"  - {k[2:]}: вес {v}")
 
         df_test_prepared = prepare_test_data(df_train, df_test, best_params)
-        risk_pct = calculate_dynamic_risk(config["win_streak"])
+        risk_pct = calculate_inverse_balance_risk(
+            current_balance=config["balance"],
+            initial_balance=config["initial_balance"]
+        )
         config["risk_pct"] = risk_pct
         result, config["balance"] = run_evaluation(df_test_prepared, symbol, config["balance"], risk_pct)
 
@@ -317,12 +290,18 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
             config["win_streak"] += 1
 
         if config["bad_days"] >= 2:
-            print("🔁 Два дня подряд убыточны — переобучение...")
-            config["best_params"]= optimize(df_train, symbol, config["search_space"])
-            config["bad_days"] = config["win_streak"]  = 0
+            config["best_params"] = optimize_with_validation(
+                                        df_train,
+                                        df_val_raw,
+                                        symbol=symbol,
+                                        search_space=search_space,
+                                        target_loss=7.5,
+                                        max_rounds=5,
+                                        initial_params=config["best_params"]
+                                    )
 
         df_train = update_training_window(df_train, df_test, config["step_candles"])
-        if "window_size" in config and config["window_size"]:
-            df_train = df_train.iloc[-config["window_size"]:]
+        # if "window_size" in config and config["window_size"]:
+        #     df_train = df_train.iloc[-config["window_size"]:]
 
     finalize_walkforward(config)

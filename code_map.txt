@@ -56,7 +56,6 @@ File: trading_analysis/backtest.py
     calls → state['trades'].append
   def _try_open_position()
     calls → _open_position
-    calls → print
     calls → state.get
     calls → state.update
     calls → state['trades'].append
@@ -451,6 +450,15 @@ File: strategy/objective.py
     calls → generate_signals
     calls → run_backtest
     calls → strip_indicators
+  def estimate_window_size_from_params()
+    calls → best_params.get
+    calls → best_params.items
+    calls → int
+    calls → key.startswith
+    calls → max
+    calls → print
+    calls → sum
+    calls → weighted_periods.append
 
 File: strategy/search_space.py
 
@@ -472,7 +480,7 @@ File: strategy/walkforward.py
   def load_test_window_from_db()
     calls → load_ohlcv_from_db
     calls → print
-  def optimize_if_needed()
+  def optimize()
     calls → Trials
     calls → fmin
     calls → objective_with_df
@@ -493,14 +501,9 @@ File: strategy/walkforward.py
     calls → save_model_run
     calls → test_date.strftime
     calls → trade_log.append
-  def retrain()
-    calls → Trials
-    calls → fmin
-    calls → objective_with_df
-    calls → print
-    calls → range
   def update_training_window()
     calls → pd.concat
+    calls → print
   def finalize_walkforward()
     calls → len
     calls → max
@@ -512,16 +515,18 @@ File: strategy/walkforward.py
     calls → calculate_dynamic_risk
     calls → calculate_test_range
     calls → config.get
+    calls → config['best_params'].items
+    calls → estimate_window_size_from_params
     calls → finalize_walkforward
     calls → initialize_test
     calls → is_end_of_data
+    calls → k.startswith
     calls → load_initial_train_data
     calls → load_test_window_from_db
-    calls → optimize_if_needed
+    calls → optimize
     calls → plot_backtest_progress
     calls → prepare_test_data
     calls → print
-    calls → retrain
     calls → run_evaluation
     calls → update_tracking
     calls → update_training_window

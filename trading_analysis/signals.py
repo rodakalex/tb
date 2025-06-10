@@ -1,6 +1,9 @@
 # trading_analysis/signals.py
 import pandas_ta as ta
 
+_debug = False
+_generate_signals_counter = 0
+
 def safe_assign(df, col_name, series, dtype="float64"):
     df[col_name] = series.astype(dtype)
 
@@ -69,6 +72,8 @@ def generate_signals(df):
     return df
 
 def generate_signals(df, params=None):
+    global _generate_signals_counter
+    _generate_signals_counter += 1
     df = df.copy()
     if params is None:
         params = {}
@@ -191,5 +196,15 @@ def generate_signals(df, params=None):
         (df["atr_filter"] == 1) &
         (df["ema200_down"] == 1)
     )
+
+    if _generate_signals_counter % 25 == 0 and _debug:
+        print("🧪 Генерация сигналов:")
+        print(f"→ Вызов #{_generate_signals_counter}")
+        print(f"→ Макс long_score: {df['long_score'].max()}")
+        print(f"→ Макс short_score: {df['short_score'].max()}")
+        print(f"→ long_score_threshold: {p('long_score_threshold')}")
+        print(f"→ short_score_threshold: {p('short_score_threshold')}")
+        print(f"→ Кол-во long сигналов: {df['long_entry'].sum()}")
+        print(f"→ Кол-во short сигналов: {df['short_entry'].sum()}")
 
     return df

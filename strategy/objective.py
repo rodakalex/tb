@@ -2,32 +2,90 @@ from trading_analysis.indicators import calculate_indicators
 from trading_analysis.signals import generate_signals
 from trading_analysis.backtest import run_backtest
 from hyperopt import STATUS_OK
-
+from hyperopt import fmin, tpe, Trials
 from trading_analysis.utils import strip_indicators
 
-def objective_with_df(df_outer, symbol):
+
+import json
+from hyperopt import fmin, tpe, Trials, STATUS_OK
+
+def optimize_with_validation(df_train, df_val, symbol, search_space, target_loss=7.5, max_rounds=5, initial_params=None):
+    """
+    Оптимизирует параметры с валидацией. Использует тренировочные данные для переобучения,
+    валидационные — для основной оценки. Штрафует за переобучение.
+    Если ни одно решение не лучше, чем начальное, возвращает initial_params.
+    """
+    round_count = 0
+    best_loss = float("inf")
+    best_params = None
+    trials = Trials()
+    trial_counter = [0]
+    best_local_loss = [float("inf")]
+    found_better_than_initial = [False]
+
     def objective(params):
-        df = strip_indicators(df_outer.copy())
-        df = calculate_indicators(df)
-        df = generate_signals(df, params)
-        result, _ = run_backtest(df, symbol=symbol, report=False)
-        loss = -result["winrate"]
-        min_trades = 15
+        trial_counter[0] += 1
 
-        if result["total_trades"] < min_trades:
-            loss += (min_trades - result["total_trades"]) * 0.01 
+        df_train_prep = generate_signals(calculate_indicators(strip_indicators(df_train.copy())), params)
+        df_val_prep = generate_signals(calculate_indicators(strip_indicators(df_val.copy())), params)
 
-        if result["winrate"] < 0.5:
-            loss += (0.5 - result["winrate"]) * 2
+        train_result, _ = run_backtest(df_train_prep, symbol=symbol, report=False)
+        val_result, _ = run_backtest(df_val_prep, symbol=symbol, report=False)
 
-        loss -= result["pnl"] * 0.001
+        train_wr = train_result["winrate"]
+        val_wr = val_result["winrate"]
+        val_trades = val_result["total_trades"]
+        val_pnl = val_result["pnl"]
+        val_drawdown = val_result.get("max_drawdown", 0)
+        val_rr = val_result.get("avg_rr", 1.0)
+        val_sharpe = val_result.get("sharpe_ratio", 1.0)
 
-        if "max_drawdown" in result:
-            loss += result["max_drawdown"] * 0.001
+        if val_trades < 10 or val_wr < 0.4:
+            return {'loss': 100, 'status': STATUS_OK}
+
+        loss = 0
+        loss += (0.6 - val_wr) * 8 if val_wr < 0.6 else 0
+        loss += (20 - val_trades) * 0.1 if val_trades < 20 else 0
+        loss += abs(val_rr - 1.0) * 2
+        loss -= val_pnl * 0.002
+        loss += (val_drawdown / val_pnl) * 0.5 if val_pnl > 0 else val_drawdown * 0.001
+        loss += max(0, train_wr - val_wr) * 5
+        loss += (1 - val_sharpe) * 2 if val_sharpe < 1 else 0
+
+        if loss < best_local_loss[0]:
+            best_local_loss[0] = loss
+            found_better_than_initial[0] = True
+            log_msg = (
+                f"\n=== New Best at trial {trial_counter[0]} ===\n"
+                f"Loss: {loss:.4f} | Winrate: {val_wr:.2%} | Trades: {val_trades} | PnL: {val_pnl:.2f} | Sharpe: {val_sharpe:.2f}\n"
+            )
+            print(log_msg)
 
         return {'loss': loss, 'status': STATUS_OK}
 
-    return objective
+    while best_loss > target_loss and round_count < max_rounds:
+        print(f"🔁 Оптимизация раунд {round_count + 1}")
+        params = fmin(
+            fn=objective,
+            space=search_space,
+            algo=tpe.suggest,
+            max_evals=200 * (round_count + 1),
+            trials=trials
+        )
+
+        best_trial = trials.best_trial
+        best_loss = best_trial['result']['loss']
+        best_params = params
+        round_count += 1
+
+        print(f"✅ Лучший loss после раунда {round_count}: {best_loss:.4f}")
+
+    if not found_better_than_initial[0] and initial_params is not None:
+        print("⚠️ Оптимизация не нашла лучших параметров — возвращаю начальные.")
+        return initial_params
+
+    return best_params
+
 
 def estimate_window_size_from_params(best_params: dict) -> int:
     """
@@ -76,4 +134,3 @@ def estimate_window_size_from_params(best_params: dict) -> int:
 
     print(f"🧠 window_size выбран автоматически: {window_size}")
     return window_size
-

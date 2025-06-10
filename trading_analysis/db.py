@@ -58,8 +58,6 @@ def save_ohlcv_to_db(df: pd.DataFrame, symbol: str, interval: str):
         session.bulk_save_objects(records)
         session.commit()
         print(f"[DB] ✅ Сохранено {len(records)} новых свечей для {symbol} ({interval})")
-    else:
-        print(f"[DB] 🔁 Нет новых свечей для {symbol} ({interval})")
 
     session.close()
 
@@ -112,6 +110,7 @@ def get_latest_timestamp(symbol: str) -> int:
     session = SessionLocal()
     result = session.query(func.max(Candle.timestamp)).filter(Candle.symbol == symbol).scalar()
     session.close()
+    
     return result or 0
 
 def fetch_and_save_all_ohlcv(symbol: str, interval: str = "30", batch_limit: int = 1000):
@@ -160,40 +159,63 @@ def interval_to_timedelta(interval: str) -> timedelta:
     else:
         raise ValueError(f"Неизвестный формат интервала Bybit: '{interval}'")
 
-def check_ohlcv_integrity(symbol: str, interval: str = '30'):
+def safe_check_ohlcv_integrity(symbol: str, interval: str = '30'):
+    """
+    Безопасная проверка целостности данных:
+    - наличие свечей в БД
+    - равномерность интервалов
+    - свежесть последней свечи
+    """
     print(f"🧪 Проверка целостности данных для {symbol} ({interval})...")
-    df = load_ohlcv_from_db(symbol, limit=100_000, interval=interval)
+
+    try:
+        df = load_ohlcv_from_db(symbol, limit=100_000, interval=interval)
+    except ValueError as e:
+        print(f"❌ Ошибка загрузки OHLCV: {e}")
+        return False
 
     if df.empty:
         print("❌ Нет данных в БД.")
-        return
+        return False
 
     try:
         expected_delta = interval_to_timedelta(interval)
     except ValueError as e:
-        print(f"❌ {e}")
-        return
+        print(f"❌ Ошибка интервала: {e}")
+        return False
 
-    missing_timestamps = []
-
+    # Проверка на пропущенные свечи
     timestamps = df.index.to_list()
-    for prev, curr in zip(timestamps[:-1], timestamps[1:]):
-        delta = curr - prev
-        if delta != expected_delta:
-            missing_count = int(delta / expected_delta) - 1
-            for i in range(missing_count):
-                missing_ts = prev + expected_delta * (i + 1)
-                missing_timestamps.append(missing_ts)
+    missing = [
+        prev + expected_delta * (i + 1)
+        for prev, curr in zip(timestamps[:-1], timestamps[1:])
+        if (delta := curr - prev) != expected_delta
+        for i in range(int(delta / expected_delta) - 1)
+    ]
 
-    if missing_timestamps:
-        print(f"⚠️ Обнаружены пропущенные свечи: {len(missing_timestamps)}")
-        for ts in missing_timestamps[:10]:
+    if missing:
+        print(f"⚠️ Обнаружены пропущенные свечи: {len(missing)}")
+        for ts in missing[:10]:
             print(f" - {ts}")
-        if len(missing_timestamps) > 10:
-            print("...и ещё", len(missing_timestamps) - 10)
+        if len(missing) > 10:
+            print("...и ещё", len(missing) - 10)
+        return False
     else:
-        print("✅ Все свечи присутствуют и интервал целостен.")
+        print("✅ Все свечи на месте и интервал целостен.")
 
+    # Проверка свежести последней свечи
+    now = datetime.now(timezone.utc)
+    last_ts = df.index[-1]
+    if last_ts.tzinfo is None:
+        last_ts = last_ts.replace(tzinfo=timezone.utc)
+
+    if now - last_ts > expected_delta:
+        print(f"⚠️ Последняя свеча отстаёт: {last_ts} < {now} (на {now - last_ts})")
+        return False
+    else:
+        print("✅ Последняя свеча свежая.")
+
+    return True
 
 def convert_np(obj):
     if isinstance(obj, np.generic):
@@ -221,3 +243,32 @@ def save_model_run(symbol, date, params, loss, pnl, total_trades, winrate, risk_
     session.commit()
     session.close()
     
+def get_first_candle_from_db(symbol: str, interval: str = "30") -> pd.Series:
+    """
+    Возвращает первую (самую раннюю) доступную свечу (OHLCV) из базы данных.
+    """
+    session = SessionLocal()
+    try:
+        stmt = (
+            select(Candle)
+            .where(Candle.symbol == symbol, Candle.interval == interval)
+            .order_by(Candle.timestamp.asc())
+            .limit(1)
+        )
+        candle = session.execute(stmt).scalar_one_or_none()
+
+        if candle is None:
+            raise ValueError(f"❌ В базе нет свечей для {symbol} ({interval})")
+
+        return pd.Series({
+            "timestamp": datetime.fromtimestamp(candle.timestamp / 1000),
+            "open": candle.open,
+            "high": candle.high,
+            "low": candle.low,
+            "close": candle.close,
+            "volume": candle.volume
+        })
+
+    finally:
+        session.close()
+
