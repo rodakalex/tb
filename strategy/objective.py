@@ -111,7 +111,7 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
         return {'loss': total_loss, 'status': STATUS_OK}
     
     patience = 50
-    while no_improve_rounds <= patience:
+    while no_improve_rounds <= patience and round_count <= 5:
         print(f"🔁 Оптимизация раунд {round_count + 1}")
         params = fmin(
             fn=objective,
@@ -139,6 +139,9 @@ def estimate_window_size_from_params(best_params: dict) -> int:
     Оценивает необходимый window_size на основе весов и периодов активных индикаторов,
     добавляя надбавку за тяжёлые индикаторы.
     """
+    if not best_params:
+        return 500
+    
     INDICATOR_PERIODS = {
         "rsi": 14,
         "macd": 26,

@@ -262,11 +262,6 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         best_params = config["best_params"]
 
         config["window_size"] = estimate_window_size_from_params(config["best_params"])
-        print(f"📈 Используемые индикаторы:")
-        for k, v in config["best_params"].items():
-            if k.startswith("w_") and v > 0:
-                print(f"  - {k[2:]}: вес {v}")
-
         df_test_prepared = prepare_test_data(df_train, df_test, best_params)
         risk_pct = calculate_inverse_balance_risk(
             current_balance=config["balance"],
