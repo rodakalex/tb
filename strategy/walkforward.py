@@ -1,17 +1,17 @@
 from datetime import datetime, timezone
+import json
 import pandas as pd
-from hyperopt import fmin, tpe, Trials
 
 from trading_analysis.db import get_first_candle_from_db, load_ohlcv_from_db, save_model_run
-from trading_analysis.indicators import calculate_indicators
+from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.risk import calculate_inverse_balance_risk
-from trading_analysis.signals import generate_signals
+from trading_analysis.signals import generate_signals_cached
 from trading_analysis.backtest import run_backtest
 from trading_analysis.charts import plot_backtest_progress
 
 from strategy.objective import estimate_window_size_from_params, optimize_with_validation
 from strategy.search_space import search_space
-from trading_analysis.utils import check_split, split_train_val_test
+from trading_analysis.utils import sanitize_params, split_train_val
 
 def initialize_test(symbol: str, interval: str = "30") -> dict:
     """
@@ -115,8 +115,9 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
     :return: подготовленный DataFrame для теста
     """
     df_full = pd.concat([df_train, df_test])
-    df_full = calculate_indicators(df_full)
-    df_full = generate_signals(df_full, best_params)
+    df_full = calculate_indicators_cached(df_full)
+    params_serialized = json.dumps(sanitize_params(best_params), sort_keys=True)
+    df_full = generate_signals_cached(df_full, params_serialized)
 
     # Возвращаем только тестовую часть, по длине df_test
     return df_full.iloc[-len(df_test):]
@@ -249,18 +250,15 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
             print("⚠ Недостаточно тестовых данных в БД.")
             break
         
-        df_train_raw, df_val_raw, test = split_train_val_test(df_train)
-        check_split(df_train_raw, df_val_raw, test)
+        df_train_raw, df_val_raw = split_train_val(df_train)
         if config.get("best_params") is None:
             config["best_params"] = optimize_with_validation(
-                                                df_train,
-                                                df_val_raw,
-                                                symbol=symbol,
-                                                search_space=search_space,
-                                                target_loss=7.5,
-                                                max_rounds=5,
-                                                initial_params=config["best_params"]
-                                            )
+                df_train_raw,
+                df_val_raw,
+                symbol=symbol,
+                search_space=search_space,
+                initial_params=config["best_params"]
+            )
         best_params = config["best_params"]
 
         config["window_size"] = estimate_window_size_from_params(config["best_params"])
@@ -291,17 +289,13 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
 
         if config["bad_days"] >= 2:
             config["best_params"] = optimize_with_validation(
-                                        df_train,
-                                        df_val_raw,
-                                        symbol=symbol,
-                                        search_space=search_space,
-                                        target_loss=7.5,
-                                        max_rounds=5,
-                                        initial_params=config["best_params"]
-                                    )
+                df_train_raw,
+                df_val_raw,
+                symbol=symbol,
+                search_space=search_space,
+                initial_params=config["best_params"]
+            )
 
         df_train = update_training_window(df_train, df_test, config["step_candles"])
-        # if "window_size" in config and config["window_size"]:
-        #     df_train = df_train.iloc[-config["window_size"]:]
 
     finalize_walkforward(config)

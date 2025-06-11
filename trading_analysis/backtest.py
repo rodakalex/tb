@@ -182,6 +182,20 @@ def _close_position_by_signal(row, position_type, entry_price, position, balance
 
     return None, balance, position_type, position
 
+def max_streak(trades, kind="win"):
+    streak = 0
+    max_streak = 0
+    for t in trades:
+        if len(t) != 5:
+            continue
+        pnl = t[3]
+        if (kind == "win" and pnl > 0) or (kind == "loss" and pnl <= 0):
+            streak += 1
+            max_streak = max(max_streak, streak)
+        else:
+            streak = 0
+    return max_streak
+
 def analyze_backtest(trades, final_balance, initial_balance):
     closed_trades = [
         t for t in trades 
@@ -199,7 +213,9 @@ def analyze_backtest(trades, final_balance, initial_balance):
             "avg_trade": 0.0,
             "total_trades": 0,
             "loss": 9999,
-            "final_balance": final_balance
+            "final_balance": final_balance,
+            "max_win_streak": max_streak(closed_trades, "win"),
+            "max_loss_streak": max_streak(closed_trades, "loss"),
         }
 
     wins = [t for t in closed_trades if t[3] > 0]
@@ -455,4 +471,4 @@ def plot_equity_curve(trades, initial_balance):
         "balance": equity
     })
     equity_df.to_csv("equity_log.csv", index=False)
-    
+   

@@ -5,9 +5,9 @@ from collections import defaultdict, deque
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 
-from trading_analysis.signals import generate_signals
-from trading_analysis.bybit_api import get_bybit_kline, update_hystory
-from trading_analysis.indicators import calculate_indicators
+from trading_analysis.signals import generate_signals_cached
+from trading_analysis.bybit_api import get_bybit_kline
+from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.db import (
     save_ohlcv_to_db,
     load_ohlcv_from_db,
@@ -75,11 +75,11 @@ def run_analysis_for_symbol(symbol, interval="30", limit=1000):
     live_candle = get_live_kline(symbol)
     df = merge_live_candle(df, symbol, live_candle, interval_minutes=interval)
 
-    df = calculate_indicators(df)
+    df = calculate_indicators_cached(df)
 
     params = load_best_params(symbol)
     if params:
-        df = generate_signals(df, params=params)
+        df = generate_signals_cached(df, params=params)
     else:
         print(f"[WARN] No optimized params for {symbol}, skipping signal generation")
 

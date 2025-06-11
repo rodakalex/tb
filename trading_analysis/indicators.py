@@ -1,4 +1,5 @@
 # trading_analysis/indicators.py
+from trading_analysis.cache import memory
 import pandas as pd
 
 def safe_assign_ema(df, length, col_name):
@@ -34,3 +35,7 @@ def calculate_indicators(df):
     df = pd.concat([df, macd, bbands], axis=1)
 
     return df
+
+@memory.cache
+def calculate_indicators_cached(df):
+    return calculate_indicators(df)

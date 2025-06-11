@@ -1,5 +1,7 @@
 # trading_analysis/signals.py
 import pandas_ta as ta
+import json
+from trading_analysis.cache import memory
 
 _debug = False
 _generate_signals_counter = 0
@@ -70,6 +72,14 @@ def generate_signals(df):
     )
 
     return df
+
+@memory.cache
+def generate_signals_cached(df, params_serialized):
+    if isinstance(params_serialized, dict):
+        params = params_serialized  # поддержка старого кода
+    else:
+        params = json.loads(params_serialized)
+    return generate_signals(df, params)
 
 def generate_signals(df, params=None):
     global _generate_signals_counter
@@ -208,3 +218,4 @@ def generate_signals(df, params=None):
         print(f"→ Кол-во short сигналов: {df['short_entry'].sum()}")
 
     return df
+
