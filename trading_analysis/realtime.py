@@ -1,10 +1,12 @@
 # trading_analysis/realtime.py
+import hashlib
 import json
 from pathlib import Path
 from collections import defaultdict, deque
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 
+from strategy.utils_hashing import hash_dataframe, hash_params
 from trading_analysis.signals import generate_signals_cached
 from trading_analysis.bybit_api import get_bybit_kline
 from trading_analysis.indicators import calculate_indicators_cached
@@ -13,6 +15,7 @@ from trading_analysis.db import (
     load_ohlcv_from_db,
     get_latest_timestamp,
 )
+from trading_analysis.utils import sanitize_params
 
 kline_buffer = defaultdict(lambda: deque(maxlen=1))
 
@@ -66,8 +69,6 @@ def load_best_params(symbol: str):
     return None
 
 def run_analysis_for_symbol(symbol, interval="30", limit=1000):
-    latest_ts = get_latest_timestamp(symbol)
-
     df = get_bybit_kline(symbol, interval, limit)
     save_ohlcv_to_db(df=df, symbol=symbol)
 
@@ -75,12 +76,21 @@ def run_analysis_for_symbol(symbol, interval="30", limit=1000):
     live_candle = get_live_kline(symbol)
     df = merge_live_candle(df, symbol, live_candle, interval_minutes=interval)
 
-    df = calculate_indicators_cached(df)
+    # Хэшируем данные
+    df_hash = hash_dataframe(df)
 
+    # Загрузка и применение параметров
     params = load_best_params(symbol)
     if params:
-        df = generate_signals_cached(df, params=params)
+        sanitized_params = sanitize_params(params)
+        params_hash = hash_params(sanitized_params)
+
+        df = calculate_indicators_cached(df_hash, params_hash, df, sanitized_params)
+        df = generate_signals_cached(df, json.dumps(sanitized_params, sort_keys=True))
     else:
         print(f"[WARN] No optimized params for {symbol}, skipping signal generation")
+        # Даже без params можно считать индикаторы, если хочешь
+        df = calculate_indicators_cached(df_hash, "noparams", df, {})
 
     return df
+

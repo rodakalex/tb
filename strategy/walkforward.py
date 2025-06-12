@@ -2,7 +2,9 @@ from datetime import datetime, timezone
 import json
 import pandas as pd
 
+from strategy.utils_hashing import hash_dataframe
 from trading_analysis.db import get_first_candle_from_db, load_ohlcv_from_db, save_model_run
+from trading_analysis.feature_selection import select_important_features
 from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.risk import calculate_inverse_balance_risk
 from trading_analysis.signals import generate_signals_cached
@@ -108,18 +110,40 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
     """
     Объединяет тренировочные и тестовые данные, применяет индикаторы и сигналы,
     и возвращает подготовленные данные только для тестового окна.
-
-    :param df_train: DataFrame с тренировочными данными
-    :param df_test: DataFrame с тестовыми свечами
-    :param best_params: параметры, полученные в результате оптимизации
-    :return: подготовленный DataFrame для теста
     """
     df_full = pd.concat([df_train, df_test])
-    df_full = calculate_indicators_cached(df_full)
-    params_serialized = json.dumps(sanitize_params(best_params), sort_keys=True)
+    sanitized_params = sanitize_params(best_params)
+
+    # Генерируем хэши
+    df_hash = hash_dataframe(df_full)
+    params_serialized = json.dumps(sanitized_params, sort_keys=True)
+
+    # Вызываем кэш-функции
+    df_full = calculate_indicators_cached(df_hash, df_full, sanitized_params)
     df_full = generate_signals_cached(df_full, params_serialized)
 
-    # Возвращаем только тестовую часть, по длине df_test
+    # 🔍 Отбор признаков только один раз, если их ещё нет
+    if "enabled_long_signals" not in best_params or "enabled_short_signals" not in best_params:
+        print("🧠 Отбираем важные признаки с mutual_info_classif...")
+        
+        # Long
+        feature_cols_long = [
+            col for col in df_full.columns
+            if col.startswith("long_") and "_score" not in col and "_entry" not in col
+        ]
+        important_feats_long, _ = select_important_features(df_full, feature_cols_long, target_col="long_entry")
+        best_params["enabled_long_signals"] = important_feats_long
+        print("📌 Важные long признаки:", important_feats_long)
+
+        # Short
+        feature_cols_short = [
+            col for col in df_full.columns
+            if col.startswith("short_") and "_score" not in col and "_entry" not in col
+        ]
+        important_feats_short, _ = select_important_features(df_full, feature_cols_short, target_col="short_entry")
+        best_params["enabled_short_signals"] = important_feats_short
+        print("📌 Важные short признаки:", important_feats_short)
+
     return df_full.iloc[-len(df_test):]
 
 def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_pct: float) -> tuple:
@@ -235,13 +259,13 @@ def finalize_walkforward(config):
 
 def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
     config = initialize_test(symbol, interval)
-    df_train = load_initial_train_data(symbol=symbol, window_size=config["window_size"], start_timestamp=config["first_ts"], interval=interval)
+    df_train = load_initial_train_data(symbol=symbol, window_size=config["window_size"],
+                                       start_timestamp=config["first_ts"], interval=interval)
     config['bad_days'] = 0
 
     while True:
         test_range = calculate_test_range(df_train, config["ms_per_candle"], config["step_candles"])
         test_end_ts = test_range[1]
-
         if is_end_of_data(test_end_ts):
             break
 
@@ -249,48 +273,107 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         if df_test is None or df_test.empty:
             print("⚠ Недостаточно тестовых данных в БД.")
             break
-        
+
         df_train_raw, df_val_raw = split_train_val(df_train)
-        if config.get("best_params") is None:
-            config["best_params"] = optimize_with_validation(
-                df_train_raw,
-                df_val_raw,
-                symbol=symbol,
-                search_space=search_space,
-                initial_params=config["best_params"]
+
+        # === Оптимизация при отсутствии best_params ===
+        if not config.get("best_params"):
+            df_full = pd.concat([df_train_raw, df_val_raw])
+            df_hash = hash_dataframe(df_full)
+            dummy_params = {}
+
+            df_full = calculate_indicators_cached(df_hash, df_full, dummy_params)
+            df_full = generate_signals_cached(df_full, json.dumps(dummy_params))
+
+            feature_cols_long = [col for col in df_full.columns if col.startswith("long_") and "_score" not in col and "_entry" not in col]
+            feature_cols_short = [col for col in df_full.columns if col.startswith("short_") and "_score" not in col and "_entry" not in col]
+
+            important_feats_long, _ = select_important_features(df_full, feature_cols_long, target_col="long_entry")
+            important_feats_short, _ = select_important_features(df_full, feature_cols_short, target_col="short_entry")
+
+            print("📌 Отобранные признаки (long):", important_feats_long)
+            print("📌 Отобранные признаки (short):", important_feats_short)
+
+            best_params, sharpe_train, sharpe_val = optimize_with_validation(
+                df_train_raw, df_val_raw, symbol, search_space,
+                initial_params=None,
+                enabled_long_signals=important_feats_long,
+                enabled_short_signals=important_feats_short
             )
-        best_params = config["best_params"]
 
-        config["window_size"] = estimate_window_size_from_params(config["best_params"])
-        df_test_prepared = prepare_test_data(df_train, df_test, best_params)
-        risk_pct = calculate_inverse_balance_risk(
-            current_balance=config["balance"],
-            initial_balance=config["initial_balance"]
-        )
-        config["risk_pct"] = risk_pct
-        result, config["balance"] = run_evaluation(df_test_prepared, symbol, config["balance"], risk_pct)
+            if not best_params:
+                print("⚠ Пропуск дня — стратегия не найдена.")
+                df_train = update_training_window(df_train, df_test, config["step_candles"])
+                continue
 
+            config.update({
+                "best_params": best_params,
+                "sharpe_train": sharpe_train,
+                "sharpe_val": sharpe_val
+            })
+
+        # === Подготовка тестовых данных ===
+        try:
+            df_test_prepared = prepare_test_data(df_train, df_test, config["best_params"])
+        except Exception as e:
+            print(f"⚠ Пропуск дня — ошибка подготовки данных: {e}")
+            df_train = update_training_window(df_train, df_test, config["step_candles"])
+            continue
+
+        # === Обновление окна
+        new_window = estimate_window_size_from_params(config["best_params"], verbose=True)
+
+        if config["sharpe_train"] - config["sharpe_val"] > 1.0:
+            print("⚠️ Переобучение: window_size не обновляем")
+            new_window = config["window_size"]
+
+        max_jump = int(config["window_size"] * 0.3)
+        if abs(new_window - config["window_size"]) > max_jump:
+            print(f"⚠️ Резкий скачок window_size — отменён")
+            new_window = config["window_size"]
+
+        alpha = 0.3
+        config["window_size"] = int((1 - alpha) * config["window_size"] + alpha * new_window)
+        print(f"📐 Новый window_size: {config['window_size']}")
+
+        # === Расчёт риска и запуск
+        config["risk_pct"] = calculate_inverse_balance_risk(config["balance"], config["initial_balance"])
+
+        result, config["balance"] = run_evaluation(df_test_prepared, symbol, config["balance"], config["risk_pct"])
+        update_tracking(config, result, df_test, df_test_prepared)
+
+        # === Обработка результата
         if config["balance"] < 500:
             plot_backtest_progress(config["trade_log"], title="История поражения")
             return
 
-        update_tracking(config, result, df_test, df_test_prepared)
-
         if result["pnl"] <= 0:
-            config["bad_days"] = config.get("bad_days", 0) + 1
+            config["bad_days"] += 1
         else:
             config["bad_days"] = 0
             config["win_streak"] += 1
 
+        # === Переоптимизация при плохих днях
         if config["bad_days"] >= 2:
-            config["best_params"] = optimize_with_validation(
-                df_train_raw,
-                df_val_raw,
-                symbol=symbol,
-                search_space=search_space,
-                initial_params=config["best_params"]
+            print("🔁 Переоптимизация из-за серии убыточных дней.")
+            best_params, sharpe_train, sharpe_val = optimize_with_validation(
+                df_train_raw, df_val_raw, symbol, search_space,
+                initial_params=config["best_params"],
+                enabled_long_signals=config["best_params"]["enabled_long_signals"],
+                enabled_short_signals=config["best_params"]["enabled_short_signals"]
             )
 
+            if not best_params:
+                print("⚠ Переоптимизация не дала результата — best_params сброшены.")
+                config["best_params"] = None
+            else:
+                config.update({
+                    "best_params": best_params,
+                    "sharpe_train": sharpe_train,
+                    "sharpe_val": sharpe_val
+                })
+
+        # === Обновление тренировочного окна
         df_train = update_training_window(df_train, df_test, config["step_candles"])
 
     finalize_walkforward(config)

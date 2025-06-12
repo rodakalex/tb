@@ -1,13 +1,20 @@
+import pandas as pd
+from strategy.utils_hashing import hash_dataframe
 from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.signals import generate_signals_cached
 from trading_analysis.backtest import run_backtest
-from hyperopt import STATUS_OK
-from hyperopt import fmin, tpe, Trials
 from trading_analysis.utils import strip_indicators
 import numpy as np
-from hyperopt import fmin, tpe, Trials, STATUS_OK
+from hyperopt import fmin, tpe, Trials, STATUS_OK, space_eval
 
-def optimize_with_validation(df_train, df_val, symbol, search_space, initial_params=None):
+def prepare_data(df, params):
+    df_clean = strip_indicators(df.copy())
+    df_hash = hash_dataframe(df_clean)
+    df_indicators = calculate_indicators_cached(df_hash, df_clean, params)
+    return generate_signals_cached(df_indicators, params)
+
+def optimize_with_validation(df_train, df_val, symbol, search_space, initial_params=None,
+                             enabled_long_signals=None, enabled_short_signals=None, verbose=True):
     """
     Оптимизирует параметры с валидацией. Использует тренировочные данные для переобучения,
     валидационные — для основной оценки. Штрафует за переобучение.
@@ -17,23 +24,48 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
     best_loss = float("inf")
     best_params = None
     trials = Trials()
-    trial_counter = [0]
-    best_local_loss = [float("inf")]
-    found_better_than_initial = [False]
+    trial_counter = 0
+    best_local_loss = float("inf")
+    found_better_than_initial = False
     all_wr = []
     all_pnl = []
     all_dd = []
     all_trades = []
-    
+    MIN_TRADES = 10
+    PATIENCE = 50
     no_improve_rounds = 0
+    best_sharpe_train = 1.0
+    best_sharpe_val = 1.0
+
+    loss_weights = {
+        "norm_wr": 2.0,
+        "norm_trades": 2.0,
+        "norm_pnl": 1.0,
+        "norm_sharpe": 2.0,
+        "wr_gap": 10.0,
+        "norm_dd": 2.0,
+        "pnl_gap": 2.0,
+        "streak_penalty": 1.5,
+        "sharpe_gap": 5,
+    }
+
+    constraints = {
+        "min_trades": 10,
+        "min_winrate": 0.55,
+    }
 
     def objective(params):
-        nonlocal no_improve_rounds
-        trial_counter[0] += 1
+        nonlocal no_improve_rounds, trial_counter, best_local_loss, found_better_than_initial
+        trial_counter += 1
 
-        # Подготовка данных
-        df_train_prep = generate_signals_cached(calculate_indicators_cached(strip_indicators(df_train.copy())), params)
-        df_val_prep = generate_signals_cached(calculate_indicators_cached(strip_indicators(df_val.copy())), params)
+        params = params.copy()
+        if enabled_long_signals is not None:
+            params["enabled_long_signals"] = enabled_long_signals
+        if enabled_short_signals is not None:
+            params["enabled_short_signals"] = enabled_short_signals
+
+        df_train_prep = prepare_data(df_train, params)
+        df_val_prep = prepare_data(df_val, params)
 
         train_result, _ = run_backtest(df_train_prep, symbol=symbol, report=False)
         val_result, _ = run_backtest(df_val_prep, symbol=symbol, report=False)
@@ -79,41 +111,62 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
         norm_dd = val_drawdown / (abs(val_pnl) + 1e-6)
         norm_trades = abs(trades_target - val_trades) / trades_scale
 
-        if val_trades < 10 or val_wr < 0.4:
-            return {'loss': 100, 'status': STATUS_OK}
+        if val_trades < constraints["min_trades"] or val_wr < constraints["min_winrate"]:
+            return {"loss": 999, "status": STATUS_OK}
 
         strategy_score = (
-            norm_wr * 5 +
-            max(0, norm_trades) * 0.2 +
-            norm_pnl +
-            max(0, 1 - val_sharpe) * 2
+            norm_wr * loss_weights["norm_wr"] +
+            max(0, norm_trades) * loss_weights["norm_trades"] +
+            norm_pnl * loss_weights["norm_pnl"] +
+            max(0, 1 - val_sharpe) * loss_weights["norm_sharpe"]
         )
 
-        wr_gap_penalty = max(0, train_wr - val_wr) * 10
-        stability_penalty = wr_gap_penalty + norm_dd * 2 + sharpe_gap + pnl_gap
+        wr_gap_penalty = max(0, train_wr - val_wr) * loss_weights["wr_gap"]
+        stability_penalty = (
+            wr_gap_penalty +
+            norm_dd * loss_weights["norm_dd"] +
+            sharpe_gap * loss_weights["sharpe_gap"] +
+            pnl_gap * loss_weights["pnl_gap"]
+        )
 
-        total_loss = strategy_score + stability_penalty + streak_penalty
+        total_loss = (
+            strategy_score +
+            stability_penalty +
+            streak_penalty * loss_weights["streak_penalty"]
+        )
 
-        if total_loss < best_local_loss[0]:
-            best_local_loss[0] = total_loss
+        if total_loss < best_local_loss:
+            best_local_loss = total_loss
             no_improve_rounds = 0
-            found_better_than_initial[0] = True
-            print(
-                f"\n=== New Best at trial {trial_counter[0]} ===\n"
-                f"Loss: {total_loss:.4f} | Winrate: {val_wr:.2%} | Trades: {val_trades} | "
-                f"PnL: {val_pnl:.2f} | Sharpe: {val_sharpe:.2f} | "
-                f" ⚙️ norm_wr: {norm_wr:.2f}, norm_pnl: {norm_pnl:.2f}, norm_dd: {norm_dd:.2f}, norm_trades: {norm_trades:.2f} | "
-                f"🎯 wr_target={wr_target:.3f}, wr_scale={wr_scale:.3f}, pnl_scale={pnl_scale:.2f}, trades_target={trades_target}, trades_scale={trades_scale:.2f}"
-            )
+            found_better_than_initial = True
+            best_sharpe_train = sharpe_train
+            best_sharpe_val = val_sharpe
+            if verbose:
+                print(
+                    f"\n=== New Best at trial {trial_counter} ===\n"
+                    f"Loss: {total_loss:.4f} | Winrate: {val_wr:.2%} | Trades: {val_trades} | "
+                    f"PnL: {val_pnl:.2f} | Sharpe: {val_sharpe:.2f} | "
+                    f"⚙️ norm_wr: {norm_wr:.2f}, norm_pnl: {norm_pnl:.2f}, norm_dd: {norm_dd:.2f}, norm_trades: {norm_trades:.2f} | "
+                    f"🎯 wr_target={wr_target:.3f}, wr_scale={wr_scale:.3f}, pnl_scale={pnl_scale:.2f}, trades_target={trades_target}, trades_scale={trades_scale:.2f}"
+                )
         else:
             no_improve_rounds += 1
 
         return {'loss': total_loss, 'status': STATUS_OK}
     
-    patience = 50
-    while no_improve_rounds <= patience and round_count <= 5:
+    if verbose:
         print(f"🔁 Оптимизация раунд {round_count + 1}")
-        params = fmin(
+    if initial_params:
+        if verbose:
+            print("🔍 Оценка initial_params")
+        initial_result = objective(initial_params)
+        if initial_result["loss"] < best_local_loss:
+            best_local_loss = initial_result["loss"]
+            best_params = initial_params
+            found_better_than_initial = True
+
+    while no_improve_rounds <= PATIENCE and round_count < 1:
+        fmin(
             fn=objective,
             space=search_space,
             algo=tpe.suggest,
@@ -122,65 +175,78 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
         )
 
         best_trial = trials.best_trial
-        best_loss = best_trial['result']['loss']
-        best_params = params
+        trial_loss = best_trial['result']['loss']
+        if best_trial['result']['loss'] <= best_local_loss:
+            best_local_loss = best_trial['result']['loss']
+            flat_vals = {k: v[0] if isinstance(v, list) else v for k, v in best_trial['misc']['vals'].items()}
+            best_params = space_eval(search_space, flat_vals)
+            best_loss = trial_loss
+            found_better_than_initial = True
+
         round_count += 1
+        if verbose:
+            print(f"✅ Лучший loss после раунда {round_count}: {best_loss:.4f}")
 
-        print(f"✅ Лучший loss после раунда {round_count}: {best_loss:.4f}")
+    if not found_better_than_initial:
+        if verbose:
+            print("⚠️ Оптимизация не нашла лучших параметров.")
+        if initial_params is not None:
+            return initial_params, best_sharpe_train, best_sharpe_val
+        else:
+            return {}, best_sharpe_train, best_sharpe_val
 
-    if not found_better_than_initial[0] and initial_params is not None:
-        print("⚠️ Оптимизация не нашла лучших параметров — возвращаю начальные.")
-        return initial_params
+    if best_local_loss == 999:
+        return None, None, None
+    return best_params, best_sharpe_train, best_sharpe_val
 
-    return best_params
-
-def estimate_window_size_from_params(best_params: dict) -> int:
+def estimate_window_size_from_params(
+    best_params: dict,
+    indicator_periods: dict = None,
+    heavy_penalties: dict = None,
+    period_multiplier: float = 8.0,
+    min_window_size: int = 300,
+    max_window_size: int = 2000,
+    verbose: bool = True
+) -> int:
     """
-    Оценивает необходимый window_size на основе весов и периодов активных индикаторов,
-    добавляя надбавку за тяжёлые индикаторы.
+    Оценивает оптимальный window_size на основе активных индикаторов и их весов.
+    Учитывает штрафы за тяжёлые индикаторы. Возвращает ограниченный размер окна.
     """
     if not best_params:
-        return 500
-    
-    INDICATOR_PERIODS = {
-        "rsi": 14,
-        "macd": 26,
-        "mfi": 14,
-        "cci": 20,
-        "stochrsi": 14,
-        "tema_cross": 21,
-        "ema_cross": 200,
-        "trend": 50,
-        "donchian": 20,
-        "roc": 12,
-        "volspike": 20,
-        "volume": 20,
+        return min_window_size
+
+    indicator_periods = indicator_periods or {
+        "rsi": 14, "macd": 26, "mfi": 14, "cci": 20, "stochrsi": 14,
+        "tema_cross": 21, "ema_cross": 200, "trend": 50,
+        "donchian": 20, "roc": 12, "volspike": 20, "volume": 20
     }
 
-    weighted_periods = []
+    heavy_penalties = heavy_penalties or {
+        "w_ema_cross": (2.0, 150),
+        "w_trend": (2.0, 100),
+    }
+
+    weighted_sum = 0
     total_weight = 0
 
     for key, weight in best_params.items():
-        if key.startswith("w_"):
-            indicator = key[2:]
-            if indicator in INDICATOR_PERIODS and weight > 0:
-                period = INDICATOR_PERIODS[indicator]
-                weighted_periods.append(period * weight)
+        if key.startswith("w_") and weight > 0:
+            name = key[2:]
+            if name in indicator_periods:
+                weighted_sum += indicator_periods[name] * weight
                 total_weight += weight
 
-    if not weighted_periods or total_weight == 0:
-        return 500
+    if total_weight == 0:
+        return min_window_size
 
-    avg_weighted_period = sum(weighted_periods) / total_weight
+    base = weighted_sum / total_weight
+    penalty = sum(p for k, (threshold, p) in heavy_penalties.items()
+                  if best_params.get(k, 0) >= threshold)
 
-    # Надбавка за тяжёлые индикаторы
-    penalty = 0
-    if best_params.get("w_ema_cross", 0) >= 2.0:
-        penalty += 150
-    if best_params.get("w_trend", 0) >= 2.0:
-        penalty += 100
+    window_size = int(base * period_multiplier + penalty)
+    window_size = max(min_window_size, min(window_size, max_window_size))
 
-    window_size = max(500, int(avg_weighted_period * 8) + penalty)
+    if verbose:
+        print(f"🧠 Auto-selected window_size: {window_size} (base={base:.1f}, penalty={penalty})")
 
-    print(f"🧠 window_size выбран автоматически: {window_size}")
     return window_size

@@ -20,6 +20,17 @@ File: trading_analysis/models.py
   class Candle
   class ModelRun
 
+File: trading_analysis/risk.py
+  def calculate_position_size()
+    calls → logger.debug
+    calls → logger.warning
+  def calculate_sl_pct_from_atr()
+  def generate_dynamic_tp_sl()
+  def calculate_inverse_balance_risk()
+    calls → logger.debug
+    calls → max
+    calls → min
+
 File: trading_analysis/backtest.py
   def plot_trades()
     calls → dict
@@ -34,15 +45,20 @@ File: trading_analysis/backtest.py
   def _process_take_profit()
     calls → row.get
   def _process_stop_loss()
+    calls → calculate_sl_pct_from_atr
     calls → row.get
   def _open_position()
     calls → row.get
   def _close_position_by_signal()
     calls → row.get
+  def max_streak()
+    calls → len
+    calls → max
   def analyze_backtest()
     calls → abs
     calls → isinstance
     calls → len
+    calls → max_streak
     calls → sum
   def _print_backtest_results()
     calls → len
@@ -50,12 +66,14 @@ File: trading_analysis/backtest.py
     calls → print
     calls → sum
   def _prepare_tp_sl()
+    calls → calculate_sl_pct_from_atr
   def _handle_active_position()
     calls → func
     calls → state.update
     calls → state['trades'].append
   def _try_open_position()
     calls → _open_position
+    calls → calculate_position_size
     calls → state.get
     calls → state.update
     calls → state['trades'].append
@@ -141,35 +159,26 @@ File: trading_analysis/executor.py
     calls → client.place_order
     calls → print
 
+File: trading_analysis/feature_selection.py
+  def select_important_features()
+    calls → MinMaxScaler
+    calls → MinMaxScaler().fit_transform
+    calls → df[feature_cols + [target_col]].dropna
+    calls → df_clean[feature_cols].astype
+    calls → df_clean[target_col].astype
+    calls → importance_df.query
+    calls → importance_df.query('importance >= @min_importance')['feature'].tolist
+    calls → mutual_info_classif
+    calls → pd.DataFrame
+    calls → pd.DataFrame({'feature': feature_cols, 'importance': importances}).sort_values
+
 File: trading_analysis/signals.py
+  def generate_signals_cached()
+    calls → generate_signals
+    calls → isinstance
+    calls → json.loads
   def safe_assign()
     calls → series.astype
-  def generate_signals()
-    calls → (df['MACD'] < df['Signal']) & (df['MACD'].shift(1) >= df['Signal'].shift(1)) & (df['MACD'] < 0) & (df['Signal'] < 0).astype
-    calls → (df['MACD'] > df['Signal']) & (df['MACD'].shift(1) <= df['Signal'].shift(1)) & (df['MACD'] > 0).astype
-    calls → (df['RSI'] > 45) & (df['RSI'] < 75).astype
-    calls → df.copy
-    calls → df['BBP'] > 0.5.astype
-    calls → df['EMA_200'].diff
-    calls → df['EMA_200'].diff() < 0.astype
-    calls → df['EMA_9'] < df['EMA_21'].astype
-    calls → df['EMA_9'] > df['EMA_21'].astype
-    calls → df['MACD'].shift
-    calls → df['RSI'] < 50.astype
-    calls → df['Signal'].shift
-    calls → df['atr'] > df['atr'].rolling(50).mean().astype
-    calls → df['atr'].rolling
-    calls → df['atr'].rolling(50).mean
-    calls → df['close'] < df['EMA_200'].astype
-    calls → df['close'] < df['EMA_9'].astype
-    calls → df['close'] > df['BBM'].astype
-    calls → df['close'] > df['EMA_200'].astype
-    calls → df['volume'] > df['Volume_SMA_20'].astype
-    calls → df['volume'] > df['volume'].rolling(10).max().shift(1).astype
-    calls → df['volume'].rolling
-    calls → df['volume'].rolling(10).max
-    calls → df['volume'].rolling(10).max().shift
-    calls → ta.atr
   def generate_signals()
     calls → (df['MACD'] < df['Signal']) & (df['MACD'].shift(1) >= df['Signal'].shift(1)) & (df['MACD'] < 0) & (df['Signal'] < 0).astype
     calls → (df['MACD'] > df['Signal']) & (df['MACD'].shift(1) <= df['Signal'].shift(1)) & (df['MACD'] > 0).astype
@@ -216,6 +225,8 @@ File: trading_analysis/signals.py
     calls → df['volume'].rolling(20).mean
     calls → df['volume'].rolling(20).std
     calls → df['volume_zscore'] > 2.astype
+    calls → df[long_signals].sum
+    calls → df[short_signals].sum
     calls → donchian_high.shift
     calls → donchian_low.shift
     calls → p
@@ -244,8 +255,13 @@ File: trading_analysis/indicators.py
     calls → df['volume'].rolling(window=20, min_periods=1).mean
     calls → pd.concat
     calls → safe_assign_ema
+  def calculate_indicators_cached()
+    calls → calculate_indicators
+    calls → memory.cache
 
 File: trading_analysis/websocket_kline.py
+
+File: trading_analysis/cache.py
 
 File: trading_analysis/db.py
   def init_db()
@@ -311,13 +327,14 @@ File: trading_analysis/db.py
     calls → int
     calls → interval.isdigit
     calls → timedelta
-  def check_ohlcv_integrity()
+  def safe_check_ohlcv_integrity()
+    calls → datetime.now
     calls → df.index.to_list
     calls → int
     calls → interval_to_timedelta
+    calls → last_ts.replace
     calls → len
     calls → load_ohlcv_from_db
-    calls → missing_timestamps.append
     calls → print
     calls → range
     calls → zip
@@ -334,6 +351,19 @@ File: trading_analysis/db.py
     calls → session.add
     calls → session.close
     calls → session.commit
+  def get_first_candle_from_db()
+    calls → Candle.timestamp.asc
+    calls → SessionLocal
+    calls → ValueError
+    calls → datetime.fromtimestamp
+    calls → pd.Series
+    calls → select
+    calls → select(Candle).where
+    calls → select(Candle).where(Candle.symbol == symbol, Candle.interval == interval).order_by
+    calls → select(Candle).where(Candle.symbol == symbol, Candle.interval == interval).order_by(Candle.timestamp.asc()).limit
+    calls → session.close
+    calls → session.execute
+    calls → session.execute(stmt).scalar_one_or_none
 
 File: trading_analysis/charts.py
   def plot_volume()
@@ -408,7 +438,15 @@ File: trading_analysis/utils.py
   def should_update_data()
     calls → datetime.fromtimestamp
     calls → datetime.now
-    calls → timedelta
+    calls → datetime.timedelta
+  def split_train_val()
+    calls → int
+    calls → len
+  def sanitize_params()
+    calls → float
+    calls → int
+    calls → isinstance
+    calls → params.items
 
 File: trading_analysis/realtime.py
   def update_live_kline()
@@ -432,33 +470,69 @@ File: trading_analysis/realtime.py
     calls → open
     calls → path.exists
   def run_analysis_for_symbol()
-    calls → calculate_indicators
-    calls → generate_signals
+    calls → calculate_indicators_cached
+    calls → generate_signals_cached
     calls → get_bybit_kline
-    calls → get_latest_timestamp
     calls → get_live_kline
+    calls → hash_dataframe
+    calls → hash_params
+    calls → json.dumps
     calls → load_best_params
     calls → load_ohlcv_from_db
     calls → merge_live_candle
     calls → print
+    calls → sanitize_params
     calls → save_ohlcv_to_db
 
 File: strategy/objective.py
-  def objective_with_df()
-    calls → calculate_indicators
-    calls → df_outer.copy
-    calls → generate_signals
+  def optimize_with_validation()
+    calls → Trials
+    calls → abs
+    calls → all_dd.append
+    calls → all_pnl.append
+    calls → all_trades.append
+    calls → all_wr.append
+    calls → calculate_indicators_cached
+    calls → df_train.copy
+    calls → df_val.copy
+    calls → float
+    calls → fmin
+    calls → generate_signals_cached
+    calls → hash_dataframe
+    calls → len
+    calls → max
+    calls → np.median
+    calls → np.std
+    calls → objective
+    calls → params.copy
+    calls → print
     calls → run_backtest
     calls → strip_indicators
+    calls → train_result.get
+    calls → val_result.get
   def estimate_window_size_from_params()
     calls → best_params.get
     calls → best_params.items
+    calls → heavy_penalties.items
     calls → int
     calls → key.startswith
     calls → max
+    calls → min
     calls → print
     calls → sum
-    calls → weighted_periods.append
+
+File: strategy/utils_hashing.py
+  def hash_dataframe()
+    calls → hashlib.md5
+    calls → hashlib.md5(pd.util.hash_pandas_object(df, index=True).values).hexdigest
+    calls → pd.util.hash_pandas_object
+  def hash_dict()
+    calls → hashlib.md5
+    calls → hashlib.md5(json.dumps(d, sort_keys=True).encode()).hexdigest
+    calls → json.dumps
+    calls → json.dumps(d, sort_keys=True).encode
+  def hash_params()
+    calls → hash_dict
 
 File: strategy/search_space.py
 
@@ -466,8 +540,9 @@ File: strategy/walkforward.py
   def initialize_test()
     calls → datetime.now
     calls → datetime.now(timezone.utc).timestamp
-    calls → find_first_kline_timestamp
+    calls → get_first_candle_from_db
     calls → int
+    calls → last_candle.timestamp.timestamp
   def load_initial_train_data()
     calls → load_ohlcv_from_db
   def is_end_of_data()
@@ -480,18 +555,17 @@ File: strategy/walkforward.py
   def load_test_window_from_db()
     calls → load_ohlcv_from_db
     calls → print
-  def optimize()
-    calls → Trials
-    calls → fmin
-    calls → objective_with_df
-    calls → print
   def prepare_test_data()
-    calls → calculate_indicators
-    calls → generate_signals
+    calls → calculate_indicators_cached
+    calls → col.startswith
+    calls → generate_signals_cached
+    calls → hash_dataframe
+    calls → json.dumps
     calls → len
     calls → pd.concat
-  def calculate_dynamic_risk()
-    calls → min
+    calls → print
+    calls → sanitize_params
+    calls → select_important_features
   def run_evaluation()
     calls → run_backtest
   def update_tracking()
@@ -512,21 +586,29 @@ File: strategy/walkforward.py
     calls → print
     calls → sum
   def walk_forward_test()
-    calls → calculate_dynamic_risk
+    calls → abs
+    calls → calculate_indicators_cached
+    calls → calculate_inverse_balance_risk
     calls → calculate_test_range
+    calls → col.startswith
     calls → config.get
-    calls → config['best_params'].items
     calls → estimate_window_size_from_params
     calls → finalize_walkforward
+    calls → generate_signals_cached
+    calls → hash_dataframe
     calls → initialize_test
+    calls → int
     calls → is_end_of_data
-    calls → k.startswith
+    calls → json.dumps
     calls → load_initial_train_data
     calls → load_test_window_from_db
-    calls → optimize
+    calls → optimize_with_validation
+    calls → pd.concat
     calls → plot_backtest_progress
     calls → prepare_test_data
     calls → print
     calls → run_evaluation
+    calls → select_important_features
+    calls → split_train_val
     calls → update_tracking
     calls → update_training_window

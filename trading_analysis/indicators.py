@@ -36,6 +36,6 @@ def calculate_indicators(df):
 
     return df
 
-@memory.cache
-def calculate_indicators_cached(df):
+@memory.cache(ignore=['df', 'params'])
+def calculate_indicators_cached(df_hash: str, df: pd.DataFrame, params: dict):
     return calculate_indicators(df)
