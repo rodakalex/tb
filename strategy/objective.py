@@ -1,4 +1,3 @@
-import pandas as pd
 from strategy.utils_hashing import hash_dataframe
 from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.signals import generate_signals_cached
