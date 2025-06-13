@@ -142,3 +142,4 @@ def generate_signals(df, params=None):
     df["short_entry"] = short_entry
 
     return df
+

@@ -113,3 +113,118 @@ def test_short_entry_from_roc_only():
     assert (result["short_score"] == result["short_roc"]).all()
     assert result["short_entry"].sum() > 0
 
+@pytest.mark.parametrize("signal", [
+    "short_macd",
+    "short_rsi",
+    "short_mfi",
+    "short_cci",
+    "short_bb_rebound",
+    "short_below_ema9",
+    "short_roc",
+    "short_donchian",
+    "short_tema_cross",
+])
+
+@pytest.fixture(autouse=True)
+def patch_indicators(monkeypatch):
+    monkeypatch.setattr("pandas_ta.stochrsi", lambda *a, **kw: pd.DataFrame({
+        "STOCHRSIk_14_14_3_3": [50]*29 + [90],
+        "STOCHRSId_14_14_3_3": [50]*29 + [95],
+    }))
+    monkeypatch.setattr("pandas_ta.roc", lambda *a, **kw: pd.Series([0]*29 + [-2]))
+    monkeypatch.setattr("pandas_ta.tema", lambda *a, **kw: pd.Series([100]*29 + [95]))
+    monkeypatch.setattr("pandas_ta.cci", lambda *a, **kw: pd.Series([0]*29 + [120]))
+    monkeypatch.setattr("pandas_ta.mfi", lambda *a, **kw: pd.Series([50]*29 + [80]))
+    monkeypatch.setattr("pandas_ta.tema", lambda *a, **kw: pd.Series([100]*29 + [95]) if kw["length"] == 9 else pd.Series([100]*29 + [100]))
+
+def get_test_df_for_signal(signal_name: str, n: int = 30) -> pd.DataFrame:
+    # Базовые значения
+    df = pd.DataFrame({
+        'close': np.full(n, 100.0),
+        'high': np.full(n, 101.0),
+        'low': np.full(n, 99.0),
+        'open': np.full(n, 100.0),
+        'volume': np.full(n, 1000.0),
+        'EMA_9': np.full(n, 100.0),
+        'EMA_21': np.full(n, 101.0),
+        'EMA_200': np.linspace(110, 90, n),  # падающая, чтобы ema200_down = 1
+        'MACD': np.full(n, 0.0),
+        'Signal': np.full(n, 0.0),
+        'BBM': np.full(n, 100.0),
+        'BBP': np.full(n, 0.6),
+        'Volume_SMA_20': np.full(n, 1000.0),
+        'RSI': np.full(n, 55.0),
+        'MFI': np.full(n, 50.0),
+        'CCI': np.full(n, 0.0),
+        'ROC': np.full(n, 0.0),
+        'TEMA_9': np.full(n, 100.0),
+        'TEMA_21': np.full(n, 100.0),
+        'ADX': np.full(n, 25.0),
+        'volume_zscore': np.full(n, 0.0),
+        'StochRSI_K': np.full(n, 50.0),
+        'StochRSI_D': np.full(n, 50.0),
+    })
+
+    # Принудительно включаем только последний ряд
+    i = n - 1
+    i_prev = n - 2
+
+    if signal_name == "short_macd":
+        df.loc[i - 1,   "MACD"] = -0.4
+        df.loc[i - 1, "Signal"] = -0.6
+        df.loc[i,       "MACD"] = -0.6
+        df.loc[i,     "Signal"] = -0.4
+    elif signal_name == "short_rsi":
+        df.loc[i, "RSI"] = 30
+
+    elif signal_name == "short_mfi":
+        df.loc[i, "MFI"] = 80
+
+    elif signal_name == "short_cci":
+        df.loc[i, "CCI"] = 120
+
+    elif signal_name == "short_bb_rebound":
+        df.loc[i, "close"] = 105
+        df.loc[i, "BBM"] = 100
+
+    elif signal_name == "short_below_ema9":
+        df.loc[i, "close"] = 95
+        df.loc[i, "EMA_9"] = 100
+
+    elif signal_name == "short_roc":
+        df.loc[i, "ROC"] = -2
+
+    elif signal_name == "short_donchian":
+        df["low"] = np.linspace(110, 90, n)
+        df.loc[i, "close"] = df["low"].min() - 1  # явно ниже
+
+    elif signal_name == "short_tema_cross":
+        df["TEMA_9"] = 95
+        df["TEMA_21"] = 100
+
+    elif signal_name == "short_stochrsi":
+        df.loc[i, "StochRSI_K"] = 90
+        df.loc[i, "StochRSI_D"] = 95
+
+    else:
+        raise ValueError(f"Неизвестный сигнал: {signal_name}")
+
+    return df
+
+@pytest.mark.parametrize("signal", [
+    "short_macd", "short_rsi", "short_mfi", "short_cci", "short_bb_rebound",
+    "short_below_ema9", "short_roc", "short_donchian", "short_tema_cross",
+    "short_stochrsi"
+])
+def test_individual_short_signal(signal):
+    df = get_test_df_for_signal(signal)
+    params = {
+        "enabled_short_signals": [signal],
+        "short_score_threshold": 1,
+        "use_atr_filter": False,
+        "use_ema200_down_filter": False,
+        "use_trend_filter": False
+    }
+    result = generate_signals(df, params)
+    assert result["short_score"].iloc[-1] == 1
+    assert result["short_entry"].iloc[-1]

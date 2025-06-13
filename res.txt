@@ -1,0 +1,763 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.0, pluggy-1.6.0
+rootdir: /home/abstract/tb
+collected 23 items
+
+trading_analysis/tests/test_risk.py .....                                [ 21%]
+trading_analysis/tests/test_signals.py .........FFFFFFFFF                [100%]
+
+=================================== FAILURES ===================================
+___________ test_individual_short_signal_triggers_entry[short_macd] ____________
+
+signal = 'short_macd'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+>       assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+E       AssertionError: short_macd score failed
+E       assert 0 == 1
+
+trading_analysis/tests/test_signals.py:200: AssertionError
+____________ test_individual_short_signal_triggers_entry[short_rsi] ____________
+
+signal = 'short_rsi'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+        assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+>       assert result["short_entry"].iloc[-1] is True, f"{signal} did not trigger entry"
+E       AssertionError: short_rsi did not trigger entry
+E       assert True is True
+
+trading_analysis/tests/test_signals.py:201: AssertionError
+____________ test_individual_short_signal_triggers_entry[short_mfi] ____________
+
+signal = 'short_mfi'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+>       assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+E       AssertionError: short_mfi score failed
+E       assert 0 == 1
+
+trading_analysis/tests/test_signals.py:200: AssertionError
+____________ test_individual_short_signal_triggers_entry[short_cci] ____________
+
+signal = 'short_cci'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+>       assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+E       AssertionError: short_cci score failed
+E       assert 0 == 1
+
+trading_analysis/tests/test_signals.py:200: AssertionError
+________ test_individual_short_signal_triggers_entry[short_bb_rebound] _________
+
+signal = 'short_bb_rebound'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+        assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+>       assert result["short_entry"].iloc[-1] is True, f"{signal} did not trigger entry"
+E       AssertionError: short_bb_rebound did not trigger entry
+E       assert True is True
+
+trading_analysis/tests/test_signals.py:201: AssertionError
+________ test_individual_short_signal_triggers_entry[short_below_ema9] _________
+
+signal = 'short_below_ema9'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+        assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+>       assert result["short_entry"].iloc[-1] is True, f"{signal} did not trigger entry"
+E       AssertionError: short_below_ema9 did not trigger entry
+E       assert True is True
+
+trading_analysis/tests/test_signals.py:201: AssertionError
+____________ test_individual_short_signal_triggers_entry[short_roc] ____________
+
+signal = 'short_roc'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+>       assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+E       AssertionError: short_roc score failed
+E       assert 0 == 1
+
+trading_analysis/tests/test_signals.py:200: AssertionError
+_________ test_individual_short_signal_triggers_entry[short_donchian] __________
+
+signal = 'short_donchian'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+        assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+>       assert result["short_entry"].iloc[-1] is True, f"{signal} did not trigger entry"
+E       AssertionError: short_donchian did not trigger entry
+E       assert True is True
+
+trading_analysis/tests/test_signals.py:201: AssertionError
+________ test_individual_short_signal_triggers_entry[short_tema_cross] _________
+
+signal = 'short_tema_cross'
+
+    @pytest.mark.parametrize("signal", [
+        "short_macd",
+        "short_rsi",
+        "short_mfi",
+        "short_cci",
+        "short_bb_rebound",
+        "short_below_ema9",
+        "short_roc",
+        "short_donchian",
+        "short_tema_cross",
+    ])
+    def test_individual_short_signal_triggers_entry(signal):
+        df = get_base_df()
+    
+        # Подстроим данные под конкретный сигнал
+        if signal == "short_macd":
+            df["MACD"] = -0.3
+            df["Signal"] = -0.5
+            df.loc[df.index[-2], "MACD"] = -0.4
+            df.loc[df.index[-2], "Signal"] = -0.5
+    
+        elif signal == "short_rsi":
+            df["RSI"].iloc[-1] = 20
+    
+        elif signal == "short_mfi":
+            df["MFI"].iloc[-1] = 80
+    
+        elif signal == "short_cci":
+            df["CCI"].iloc[-1] = 150
+    
+        elif signal == "short_bb_rebound":
+            df["close"].iloc[-1] = 101
+            df["BBM"].iloc[-1] = 100
+    
+        elif signal == "short_below_ema9":
+            df["close"].iloc[-1] = 98
+            df["EMA_9"].iloc[-1] = 100
+    
+        elif signal == "short_roc":
+            df["ROC"].iloc[-1] = -2
+    
+        elif signal == "short_donchian":
+            df["low"] = np.linspace(100, 90, len(df))
+            df["close"].iloc[-1] = 89
+    
+        elif signal == "short_tema_cross":
+            df["close"] = np.linspace(120, 80, len(df))  # спад для TEMA
+    
+        params = {
+            "enabled_short_signals": [signal],
+            "short_score_threshold": 1,
+            "use_atr_filter": False,
+            "use_ema200_down_filter": False,
+            "use_trend_filter": False
+        }
+    
+        result = generate_signals(df, params)
+        assert result["short_score"].iloc[-1] == 1, f"{signal} score failed"
+>       assert result["short_entry"].iloc[-1] is True, f"{signal} did not trigger entry"
+E       AssertionError: short_tema_cross did not trigger entry
+E       assert True is True
+
+trading_analysis/tests/test_signals.py:201: AssertionError
+=============================== warnings summary ===============================
+venv/lib/python3.12/site-packages/pandas_ta/__init__.py:7
+  /home/abstract/tb/venv/lib/python3.12/site-packages/pandas_ta/__init__.py:7: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    from pkg_resources import get_distribution, DistributionNotFound
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_macd]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_rsi]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_mfi]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_cci]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_bb_rebound]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_below_ema9]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_roc]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_donchian]
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_tema_cross]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:139: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df['volume'][-1] = 2000  # для volume_spike
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_rsi]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:165: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["RSI"].iloc[-1] = 20
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_mfi]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:168: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["MFI"].iloc[-1] = 80
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_cci]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:171: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["CCI"].iloc[-1] = 150
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_bb_rebound]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:174: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["close"].iloc[-1] = 101
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_bb_rebound]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:175: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["BBM"].iloc[-1] = 100
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_below_ema9]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:178: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["close"].iloc[-1] = 98
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_below_ema9]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:179: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["EMA_9"].iloc[-1] = 100
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_roc]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:182: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["ROC"].iloc[-1] = -2
+
+trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_donchian]
+  /home/abstract/tb/trading_analysis/tests/test_signals.py:186: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+  You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+  A typical example is when you are setting values in a column of a DataFrame, like:
+  
+  df["col"][row_indexer] = value
+  
+  Use `df.loc[row_indexer, "col"] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+  
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  
+    df["close"].iloc[-1] = 89
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_macd]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_rsi]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_mfi]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_cci]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_bb_rebound]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_below_ema9]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_roc]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_donchian]
+FAILED trading_analysis/tests/test_signals.py::test_individual_short_signal_triggers_entry[short_tema_cross]
+================== 9 failed, 14 passed, 19 warnings in 0.62s ===================

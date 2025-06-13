@@ -488,6 +488,20 @@ File: trading_analysis/realtime.py
     calls → sanitize_params
     calls → save_ohlcv_to_db
 
+File: trading_analysis/tests/test_risk.py
+  def test_calculate_position_size_normal()
+    calls → abs
+    calls → calculate_position_size
+  def test_calculate_position_size_invalid_price_or_sl()
+    calls → calculate_position_size
+  def test_calculate_position_size_invalid_risk_or_leverage()
+    calls → calculate_position_size
+  def test_calculate_position_size_type_check()
+    calls → calculate_position_size
+  def test_calculate_position_size_high_sl_pct()
+    calls → abs
+    calls → calculate_position_size
+
 File: trading_analysis/tests/test_signals.py
   def get_minimal_test_df()
     calls → list
