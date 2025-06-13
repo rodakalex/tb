@@ -10,6 +10,7 @@ def prepare_data(df, params):
     df_clean = strip_indicators(df.copy())
     df_hash = hash_dataframe(df_clean)
     df_indicators = calculate_indicators_cached(df_hash, df_clean, params)
+    
     return generate_signals_cached(df_indicators, params)
 
 def optimize_with_validation(df_train, df_val, symbol, search_space, initial_params=None,
@@ -30,7 +31,6 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
     all_pnl = []
     all_dd = []
     all_trades = []
-    MIN_TRADES = 10
     PATIENCE = 50
     no_improve_rounds = 0
     best_sharpe_train = 1.0
@@ -138,8 +138,6 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
             best_local_loss = total_loss
             no_improve_rounds = 0
             found_better_than_initial = True
-            best_sharpe_train = sharpe_train
-            best_sharpe_val = val_sharpe
             if verbose:
                 print(
                     f"\n=== New Best at trial {trial_counter} ===\n"

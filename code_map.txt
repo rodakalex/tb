@@ -22,8 +22,8 @@ File: trading_analysis/models.py
 
 File: trading_analysis/risk.py
   def calculate_position_size()
-    calls → logger.debug
-    calls → logger.warning
+    calls → all
+    calls → isinstance
   def calculate_sl_pct_from_atr()
   def generate_dynamic_tp_sl()
   def calculate_inverse_balance_risk()
@@ -225,12 +225,14 @@ File: trading_analysis/signals.py
     calls → df['volume'].rolling(20).mean
     calls → df['volume'].rolling(20).std
     calls → df['volume_zscore'] > 2.astype
-    calls → df[long_signals].sum
-    calls → df[short_signals].sum
     calls → donchian_high.shift
     calls → donchian_low.shift
+    calls → len
     calls → p
     calls → params.get
+    calls → pd.Series
+    calls → signal.split
+    calls → sum
     calls → ta.adx
     calls → ta.atr
     calls → ta.cci
@@ -262,6 +264,8 @@ File: trading_analysis/indicators.py
 File: trading_analysis/websocket_kline.py
 
 File: trading_analysis/cache.py
+
+File: trading_analysis/__init__.py
 
 File: trading_analysis/db.py
   def init_db()
@@ -484,7 +488,67 @@ File: trading_analysis/realtime.py
     calls → sanitize_params
     calls → save_ohlcv_to_db
 
+File: trading_analysis/tests/test_signals.py
+  def get_minimal_test_df()
+    calls → list
+    calls → pd.DataFrame
+    calls → range
+  def test_generate_signals_basic_long()
+    calls → generate_signals
+    calls → get_minimal_test_df
+  def test_macd_signal_generation()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → len
+    calls → np.full
+    calls → result['long_macd'] == 1.sum
+  def test_empty_df()
+    calls → generate_signals
+    calls → pd.DataFrame
+    calls → pytest.raises
+  def test_threshold_param_affects_entry()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → result['long_entry'].sum
+  def test_stochrsi_none()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → monkeypatch.setattr
+    calls → result['StochRSI_K'].isna
+    calls → result['StochRSI_K'].isna().all
+  def test_custom_long_signals_only_volume()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → result['long_score'] == result['volume_above_avg'].all
+    calls → result['long_score'].unique
+    calls → set
+    calls → set(result['long_score'].unique()).issubset
+  def test_generate_signals_short_entry()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → len
+    calls → np.linspace
+  def test_trend_strength_filter_blocks_entry()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → result['long_entry'].sum
+  def test_short_entry_from_roc_only()
+    calls → generate_signals
+    calls → get_minimal_test_df
+    calls → len
+    calls → np.linspace
+    calls → result['short_entry'].sum
+    calls → result['short_score'] == result['short_roc'].all
+
+File: trading_analysis/tests/__init__.py
+
 File: strategy/objective.py
+  def prepare_data()
+    calls → calculate_indicators_cached
+    calls → df.copy
+    calls → generate_signals_cached
+    calls → hash_dataframe
+    calls → strip_indicators
   def optimize_with_validation()
     calls → Trials
     calls → abs
@@ -492,22 +556,20 @@ File: strategy/objective.py
     calls → all_pnl.append
     calls → all_trades.append
     calls → all_wr.append
-    calls → calculate_indicators_cached
-    calls → df_train.copy
-    calls → df_val.copy
+    calls → best_trial['misc']['vals'].items
     calls → float
     calls → fmin
-    calls → generate_signals_cached
-    calls → hash_dataframe
+    calls → isinstance
     calls → len
     calls → max
     calls → np.median
     calls → np.std
     calls → objective
     calls → params.copy
+    calls → prepare_data
     calls → print
     calls → run_backtest
-    calls → strip_indicators
+    calls → space_eval
     calls → train_result.get
     calls → val_result.get
   def estimate_window_size_from_params()
@@ -585,30 +647,49 @@ File: strategy/walkforward.py
     calls → plot_backtest_progress
     calls → print
     calls → sum
-  def walk_forward_test()
-    calls → abs
-    calls → calculate_indicators_cached
-    calls → calculate_inverse_balance_risk
+  def get_next_test_window()
     calls → calculate_test_range
+    calls → is_end_of_data
+    calls → load_test_window_from_db
+    calls → print
+  def initialize_best_params()
+    calls → calculate_indicators_cached
     calls → col.startswith
-    calls → config.get
-    calls → estimate_window_size_from_params
-    calls → finalize_walkforward
+    calls → config.update
     calls → generate_signals_cached
     calls → hash_dataframe
-    calls → initialize_test
-    calls → int
-    calls → is_end_of_data
     calls → json.dumps
-    calls → load_initial_train_data
-    calls → load_test_window_from_db
     calls → optimize_with_validation
     calls → pd.concat
-    calls → plot_backtest_progress
+    calls → print
+    calls → select_important_features
+  def try_prepare_test_data()
     calls → prepare_test_data
     calls → print
+  def update_window_size()
+    calls → abs
+    calls → estimate_window_size_from_params
+    calls → int
+    calls → print
+  def update_bad_days()
+  def reoptimize_strategy()
+    calls → config.update
+    calls → optimize_with_validation
+    calls → print
+  def walk_forward_test()
+    calls → calculate_inverse_balance_risk
+    calls → config.get
+    calls → finalize_walkforward
+    calls → get_next_test_window
+    calls → initialize_best_params
+    calls → initialize_test
+    calls → load_initial_train_data
+    calls → plot_backtest_progress
+    calls → reoptimize_strategy
     calls → run_evaluation
-    calls → select_important_features
     calls → split_train_val
+    calls → try_prepare_test_data
+    calls → update_bad_days
     calls → update_tracking
     calls → update_training_window
+    calls → update_window_size

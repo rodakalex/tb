@@ -18,5 +18,7 @@ search_space = {
     'tp_pct': hp.uniform('tp_pct', 0.01, 0.50),
     'sl_pct': hp.uniform('sl_pct', 0.005, 0.50),
     "use_dynamic_tp_sl": hp.choice("use_dynamic_tp_sl", [False]),
-    "risk_pct": hp.uniform("risk_pct", 0.01, 0.20)
+    "risk_pct": hp.uniform("risk_pct", 0.01, 0.20),
+    "use_atr_filter": hp.choice("use_atr_filter", [True, False]),
+    "use_ema200_down_filter": hp.choice("use_ema200_down_filter", [True, False]),
 }

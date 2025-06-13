@@ -2,26 +2,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-def calculate_position_size(balance, risk_pct, leverage, sl_pct, price):
+def calculate_position_size(
+    balance: float,
+    risk_pct: float,
+    leverage: float,
+    sl_pct: float,
+    price: float,
+) -> float:
     """
     Расчёт размера позиции по фиксированному риску.
+
+    :param balance: Общий баланс аккаунта.
+    :param risk_pct: Доля баланса, которую готов рискнуть (например, 0.01 = 1%).
+    :param leverage: Плечо.
+    :param sl_pct: Расстояние до стопа в процентах от цены (0.01 = 1%).
+    :param price: Текущая цена инструмента.
+    :return: Размер позиции в единицах инструмента.
     """
-    if price <= 0 or sl_pct <= 0:
-        logger.warning(f"Некорректные входные данные для расчёта риска: price={price}, sl_pct={sl_pct}")
+    if not all(isinstance(v, (int, float)) for v in [balance, risk_pct, leverage, sl_pct, price]):
+        return 0.0
+
+    if price <= 0 or sl_pct <= 0 or risk_pct <= 0 or leverage <= 0:
         return 0.0
 
     risk_amount = balance * risk_pct
     position_value = (risk_amount * leverage) / sl_pct
     position_size = position_value / price
 
-    logger.debug(
-        f"Risk calc | balance: {balance:.2f}, risk_pct: {risk_pct:.4f}, leverage: {leverage}, "
-        f"sl_pct: {sl_pct:.4f}, price: {price:.2f} => size: {position_size:.4f}"
-    )
-
     return position_size
-
 
 def calculate_sl_pct_from_atr(atr, entry_price, multiplier=1.2):
     """
