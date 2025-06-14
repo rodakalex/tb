@@ -553,6 +553,22 @@ File: trading_analysis/tests/test_signals.py
     calls → np.linspace
     calls → result['short_entry'].sum
     calls → result['short_score'] == result['short_roc'].all
+  def patch_indicators()
+    calls → monkeypatch.setattr
+    calls → pd.DataFrame
+    calls → pd.Series
+    calls → pytest.fixture
+    calls → pytest.mark.parametrize
+  def get_test_df_for_signal()
+    calls → ValueError
+    calls → df['low'].min
+    calls → np.full
+    calls → np.linspace
+    calls → pd.DataFrame
+  def test_individual_short_signal()
+    calls → generate_signals
+    calls → get_test_df_for_signal
+    calls → pytest.mark.parametrize
 
 File: trading_analysis/tests/__init__.py
 

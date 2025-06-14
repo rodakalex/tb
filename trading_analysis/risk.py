@@ -1,6 +1,8 @@
 import logging
+import numbers
 
 logger = logging.getLogger(__name__)
+debug = False
 
 def calculate_position_size(
     balance: float,
@@ -19,7 +21,10 @@ def calculate_position_size(
     :param price: Текущая цена инструмента.
     :return: Размер позиции в единицах инструмента.
     """
-    if not all(isinstance(v, (int, float)) for v in [balance, risk_pct, leverage, sl_pct, price]):
+    if debug:
+        print(f"[DEBUG] balance={balance}, risk_pct={risk_pct}, leverage={leverage}, sl_pct={sl_pct}, price={price}")
+
+    if not all(isinstance(v, numbers.Number) for v in [balance, risk_pct, leverage, sl_pct, price]):
         return 0.0
 
     if price <= 0 or sl_pct <= 0 or risk_pct <= 0 or leverage <= 0:
@@ -30,15 +35,6 @@ def calculate_position_size(
     position_size = position_value / price
 
     return position_size
-
-def calculate_sl_pct_from_atr(atr, entry_price, multiplier=1.2):
-    """
-    Расчёт процентного стоп-лосса на основе ATR и цены входа.
-    """
-    if atr <= 0 or entry_price <= 0:
-        return 0.02  # fallback SL
-    return atr * multiplier / entry_price
-
 
 def generate_dynamic_tp_sl(atr, entry_price, tp_mult=2.0, sl_mult=1.2):
     """
