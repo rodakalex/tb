@@ -27,7 +27,7 @@ def test_update_tracking_calls_save_model_run(mock_save_model_run):
         "total_trades": 5
     }
 
-    update_tracking(config, interval, result, df_test, df_test_prepared)
+    update_tracking(config, interval, result, df_test, df_test_prepared, triggered_restart=False)
 
     assert len(config["trade_log"]) == 1
     assert config["days_elapsed"] == 1
@@ -69,7 +69,7 @@ def test_update_tracking_calls_save_model_run(mock_save_model_run):
         "total_trades": 5
     }
 
-    update_tracking(config, interval, result, df_test, df_test_prepared)
+    update_tracking(config, interval, result, df_test, df_test_prepared, False)
 
     assert len(config["trade_log"]) == 1
     assert config["days_elapsed"] == 1
@@ -121,7 +121,7 @@ def test_winrate_drop_trigger():
 def test_no_trigger_if_all_good():
     result, config = make()
     assert should_trigger_restart(result, config) is False
-    
+
 def test_multiple_restart_conditions_triggered():
     result = {"final_balance": 850, "max_loss_streak": 4, "total_trades": 0, "winrate": 0.2}
     config = {"initial_balance": 1000, "no_trade_windows": 1}

@@ -32,3 +32,5 @@ class ModelRun(Base):
     winrate = Column(Float)
     risk_pct = Column(Float)
     retrained = Column(Boolean)
+    triggered_restart = Column(Boolean, default=False)
+    

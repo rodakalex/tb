@@ -42,6 +42,9 @@ def sanitize_params(params: dict) -> dict:
 
 def prepare_params_for_logging(params: dict, config: dict) -> dict:
     """Гарантирует, что в лог попадают используемые признаки"""
+    if not params:
+        return {}
+
     clean = convert_np(params.copy())
     clean["enabled_long_signals"] = config.get("best_params", {}).get("enabled_long_signals", [])
     clean["enabled_short_signals"] = config.get("best_params", {}).get("enabled_short_signals", [])

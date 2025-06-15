@@ -19,3 +19,8 @@ def test_prepare_params_for_logging_injects_signals():
     assert "enabled_short_signals" in result
     assert result["enabled_long_signals"] == ["long_macd", "volume_above_avg"]
     assert result["enabled_short_signals"] == ["short_rsi"]
+
+def test_prepare_params_for_logging_handles_none():
+    config = {}
+    result = prepare_params_for_logging(None, config)
+    assert result == {}

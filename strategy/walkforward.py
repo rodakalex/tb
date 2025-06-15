@@ -181,7 +181,7 @@ def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_p
     new_balance = current_balance + result["pnl"]
     return result, new_balance, new_open_position
 
-def update_tracking(config: dict, interval, result: dict, df_test, df_test_prepared):
+def update_tracking(config: dict, interval, result: dict, df_test, df_test_prepared, triggered_restart):
     """
     Обновляет журнал трейдов, сохраняет результаты модели и метрики.
 
@@ -215,7 +215,8 @@ def update_tracking(config: dict, interval, result: dict, df_test, df_test_prepa
         total_trades=result["total_trades"],
         winrate=result["winrate"],
         risk_pct=risk_pct,
-        retrained=retrained
+        retrained=retrained,
+        triggered_restart=triggered_restart
     )
 
     config["trade_log"] = trade_log
@@ -341,7 +342,7 @@ def update_window_size(config):
     config["window_size"] = int((1 - alpha) * config["window_size"] + alpha * new_window)
     print(f"📐 Новый window_size: {config['window_size']}")
 
-def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol):
+def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol, triggered_restart=False):
     print("🔁 Переоптимизация из-за серии убыточных дней.")
     best_params, sharpe_train, sharpe_val = optimize_with_validation(
         df_train_raw, df_val_raw, symbol, search_space,
@@ -410,17 +411,19 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         config["risk_pct"] = calculate_inverse_balance_risk(config["balance"], config["initial_balance"])
 
         result, config["balance"], config["open_position"] = run_evaluation(df_test_prepared, symbol, config["balance"], config["risk_pct"], open_position=config.get("open_position"))
-        update_tracking(config, interval, result, df_test, df_test_prepared)
 
         if config["balance"] < 500:
             plot_backtest_progress(config["trade_log"], title="История поражения")
             return
 
+        triggered_restart = False
         if should_trigger_restart(result, config):
             print("🔁 Условия перезапуска модели выполнены")
-            reoptimize_strategy(config, df_train_raw, df_val_raw, symbol)
-            config["no_trade_windows"] = 0  # сброс счётчика
-
+            triggered_restart = True
+            reoptimize_strategy(config, df_train_raw, df_val_raw, symbol, triggered_restart)
+            config["no_trade_windows"] = 0
+        
+        update_tracking(config, interval, result, df_test, df_test_prepared, triggered_restart=triggered_restart)
         df_train = update_training_window(df_train, df_test, config["step_candles"])
 
     finalize_walkforward(config)

@@ -226,7 +226,7 @@ def convert_np(obj):
         return {k: convert_np(v) for k, v in obj.items()}
     return obj
 
-def save_model_run(symbol, interval, date, params, loss, pnl, total_trades, winrate, risk_pct, retrained):
+def save_model_run(symbol, interval, date, params, loss, pnl, total_trades, winrate, risk_pct, retrained, triggered_restart):
     session = SessionLocal()
     params_clean = convert_np(params)
 
@@ -240,7 +240,8 @@ def save_model_run(symbol, interval, date, params, loss, pnl, total_trades, winr
         total_trades=total_trades,
         winrate=winrate,
         risk_pct=risk_pct,
-        retrained=retrained
+        retrained=retrained,
+        triggered_restart=triggered_restart
     )
     session.add(run)
     session.commit()
