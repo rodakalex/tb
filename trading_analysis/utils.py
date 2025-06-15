@@ -2,6 +2,8 @@
 import datetime
 import numpy as np
 
+from trading_analysis.db import convert_np
+
 def strip_indicators(df):
     cols_to_drop = [col for col in df.columns if col not in ["open", "high", "low", "close", "volume", "turnover"]]
     return df.drop(columns=cols_to_drop, errors="ignore")
@@ -37,3 +39,10 @@ def sanitize_params(params: dict) -> dict:
         )
         for k, v in params.items()
     }
+
+def prepare_params_for_logging(params: dict, config: dict) -> dict:
+    """Гарантирует, что в лог попадают используемые признаки"""
+    clean = convert_np(params.copy())
+    clean["enabled_long_signals"] = config.get("best_params", {}).get("enabled_long_signals", [])
+    clean["enabled_short_signals"] = config.get("best_params", {}).get("enabled_short_signals", [])
+    return clean

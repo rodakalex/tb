@@ -1,17 +1,16 @@
 # trading_analysis/db.py
-import numpy as np
 import json
 import time
-from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from trading_analysis.bybit_api import find_first_kline_timestamp, get_bybit_kline
-from trading_analysis.models import Candle, Base, ModelRun
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
-from trading_analysis.models import Base, Candle
+from datetime import datetime, timezone, timedelta
+
+import numpy as np
 import pandas as pd
-from sqlalchemy import func
-from datetime import timedelta
+from tqdm import tqdm
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session, sessionmaker
+
+from trading_analysis.bybit_api import find_first_kline_timestamp, get_bybit_kline
+from trading_analysis.models import Base, Candle, ModelRun
 
 engine = create_engine("sqlite:///market_data.db", echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
@@ -57,7 +56,6 @@ def save_ohlcv_to_db(df: pd.DataFrame, symbol: str, interval: str):
     if records:
         session.bulk_save_objects(records)
         session.commit()
-        print(f"[DB] ✅ Сохранено {len(records)} новых свечей для {symbol} ({interval})")
 
     session.close()
 
@@ -118,28 +116,32 @@ def fetch_and_save_all_ohlcv(symbol: str, interval: str = "30", batch_limit: int
     start_ts = find_first_kline_timestamp(symbol, interval)
     now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
 
+    ms_per_candle = int(interval) * 60 * 1000
+    total_candles = (now_ts - start_ts) // ms_per_candle
+
     total_saved = 0
     last_ts_seen = None
 
-    while start_ts < now_ts:
-        df = get_bybit_kline(symbol, interval, limit=batch_limit, start=start_ts)
-        if df.empty:
-            print("❌ Получен пустой DataFrame — остановка.")
-            break
+    with tqdm(total=total_candles, desc=f"{symbol} {interval}m", unit="свеч", ncols=100) as pbar:
+        while start_ts < now_ts:
+            df = get_bybit_kline(symbol, interval, limit=batch_limit, start=start_ts)
+            if df.empty:
+                print("❌ Получен пустой DataFrame — остановка.")
+                break
 
-        last_ts = int(df.index[-1].timestamp() * 1000)
-        if last_ts == last_ts_seen:
-            print("🛑 Повтор последней свечи — остановка.")
-            break
-        last_ts_seen = last_ts
+            last_ts = int(df.index[-1].timestamp() * 1000)
+            if last_ts == last_ts_seen:
+                print("🛑 Повтор последней свечи — остановка.")
+                break
+            last_ts_seen = last_ts
 
-        save_ohlcv_to_db(df, symbol, interval=interval)
-        total_saved += len(df)
+            save_ohlcv_to_db(df, symbol, interval=interval)
+            total_saved += len(df)
 
-        start_ts = last_ts + 1  # следующий после последнего
-        print(f"🔄 Загружено и сохранено ещё {len(df)} свечей. Продолжаем...")
+            start_ts = last_ts + 1
+            pbar.update(len(df))
 
-        time.sleep(0.25)
+            time.sleep(0.25)
 
     print(f"\n✅ Завершено. Всего сохранено свечей: {total_saved}")
 
@@ -224,12 +226,13 @@ def convert_np(obj):
         return {k: convert_np(v) for k, v in obj.items()}
     return obj
 
-def save_model_run(symbol, date, params, loss, pnl, total_trades, winrate, risk_pct, retrained):
+def save_model_run(symbol, interval, date, params, loss, pnl, total_trades, winrate, risk_pct, retrained):
     session = SessionLocal()
     params_clean = convert_np(params)
 
     run = ModelRun(
         symbol=symbol,
+        interval=interval,
         date=date,
         params_json=json.dumps(params_clean),
         loss=loss,

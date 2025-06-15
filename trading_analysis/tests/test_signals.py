@@ -113,18 +113,6 @@ def test_short_entry_from_roc_only():
     assert (result["short_score"] == result["short_roc"]).all()
     assert result["short_entry"].sum() > 0
 
-@pytest.mark.parametrize("signal", [
-    "short_macd",
-    "short_rsi",
-    "short_mfi",
-    "short_cci",
-    "short_bb_rebound",
-    "short_below_ema9",
-    "short_roc",
-    "short_donchian",
-    "short_tema_cross",
-])
-
 @pytest.fixture(autouse=True)
 def patch_indicators(monkeypatch):
     monkeypatch.setattr("pandas_ta.stochrsi", lambda *a, **kw: pd.DataFrame({

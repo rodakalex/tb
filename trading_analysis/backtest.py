@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from pathlib import Path
 
+verbose = True
+
 from trading_analysis.risk import calculate_position_size
 
 def plot_trades(df, trades, symbol="SYMBOL"):
@@ -145,6 +147,9 @@ def max_streak(trades, kind="win"):
 
 def analyze_backtest(trades, final_balance, initial_balance):
     # Отбираем только сделки на закрытие с корректной структурой и PnL
+    if verbose:
+        print(trades)
+    
     closed_trades = [
         t for t in trades
         if isinstance(t, tuple)
@@ -153,7 +158,8 @@ def analyze_backtest(trades, final_balance, initial_balance):
         and t[0] in (
             'CLOSE LONG', 'CLOSE SHORT',
             'TP CLOSE LONG', 'TP CLOSE SHORT',
-            'SL CLOSE LONG', 'SL CLOSE SHORT'
+            'SL CLOSE LONG', 'SL CLOSE SHORT',
+            'AUTO SELL', 'AUTO COVER' 
         )
     ]
 
@@ -170,6 +176,7 @@ def analyze_backtest(trades, final_balance, initial_balance):
             "final_balance": final_balance,
             "max_win_streak": 0,
             "max_loss_streak": 0,
+            "trades": [],
         }
 
     wins = [t for t in closed_trades if t[3] > 0]
@@ -188,8 +195,8 @@ def analyze_backtest(trades, final_balance, initial_balance):
         "final_balance": final_balance,
         "max_win_streak": max_streak(closed_trades, "win"),
         "max_loss_streak": max_streak(closed_trades, "loss"),
+        "trades": trades,
     }
-
 
 def _print_backtest_results(trades, final_balance, symbol, result):
 
@@ -210,6 +217,10 @@ def _print_backtest_results(trades, final_balance, symbol, result):
         print("Сделок для анализа нет.")
 
 def _handle_active_position(state, row, tp_sl):
+    if verbose:
+        print("⚙️ Обработка активной позиции", state)
+        print("📈 Цены: high =", row["high"], "low =", row["low"])
+    
     price_high = row["high"]
     price_low = row["low"]
     index = row.name
@@ -285,6 +296,7 @@ def _maybe_force_close(state, row):
 
 def _finalize_position(state, df):
     if state['position_type'] and state['position'] > 0:
+        print("🚪 Форсируем закрытие в конце:", state)
         final_price = df["close"].iloc[-1]
 
         if state['position_type'] == 'long':
@@ -347,23 +359,30 @@ def _save_and_report(df, state, symbol, initial_balance, result):
 
 def run_backtest(df, symbol=None, leverage=1.0, initial_balance=1000.0,
                  tp_pct=0.025, sl_pct=0.0175,
-                 report=True, initial_state=None, finalize=True, risk_pct=0.05, fee = 0.00055):
-
-    if initial_state:
-        state = initial_state.copy()
-    else:
-        state = {
-            'balance': initial_balance,
-            'position': 0,
-            'entry_price': 0,
-            'position_type': None,
-            'trades': [],
-            'leverage': leverage,
-            'fee': fee,
-        }
+                 report=True, open_position=None, finalize=True, risk_pct=0.05, fee = 0.00055):
+    state = {
+        'balance': initial_balance,
+        'position': 0,
+        'entry_price': 0,
+        'position_type': None,
+        'trades': [],
+        'leverage': leverage,
+        'fee': fee,
+        'risk_pct': risk_pct,
+        'sl_pct': sl_pct
+    }
+    if open_position:
+        state.update({
+            'position': open_position.get("position", 0),
+            'entry_price': open_position.get("entry_price", 0),
+            'position_type': open_position.get("position_type", None),
+            'trades': open_position.get("trades", [])  # важно!
+        })
 
     state["risk_pct"] = risk_pct
     state["sl_pct"] = sl_pct
+    if verbose:
+        print("🔁 Восстановление позиции:", state)
 
     for index, row in df.iterrows():
         tp_sl = {'tp': tp_pct, 'sl': sl_pct}
@@ -385,7 +404,6 @@ def run_backtest(df, symbol=None, leverage=1.0, initial_balance=1000.0,
         _save_and_report(df, state, symbol, initial_balance, result)
 
     return result, state
-
 
 def plot_equity_curve(trades, initial_balance):
     balance = initial_balance

@@ -1,4 +1,4 @@
-from trading_analysis.db import init_db
+from trading_analysis.db import fetch_and_save_all_ohlcv, init_db, safe_check_ohlcv_integrity
 from strategy.walkforward import walk_forward_test
 
 def run_realtime():
@@ -17,7 +17,7 @@ def run_realtime():
 if __name__ == "__main__":
     init_db()
     symbol, interval = 'BTCUSDT', '30'
-    # has_data = safe_check_ohlcv_integrity(symbol=symbol, interval=interval)
-    # if not has_data:
-    #     fetch_and_save_all_ohlcv(symbol=symbol, interval=interval)
+    has_data = safe_check_ohlcv_integrity(symbol=symbol, interval=interval)
+    if not has_data:
+        fetch_and_save_all_ohlcv(symbol=symbol, interval=interval)
     walk_forward_test(symbol=symbol, interval="30")

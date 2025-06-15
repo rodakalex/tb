@@ -23,6 +23,7 @@ class ModelRun(Base):
 
     id = Column(Integer, primary_key=True)
     symbol = Column(String, index=True)
+    interval = Column(String, index=True)
     date = Column(DateTime, index=True)
     params_json = Column(Text)
     loss = Column(Float)

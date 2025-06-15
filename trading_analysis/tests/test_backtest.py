@@ -69,7 +69,7 @@ def test_run_backtest_sl_only():
 
 def test_run_backtest_with_initial_state():
     df = pd.DataFrame([
-        {'open': 104, 'high': 105, 'low': 102, 'close': 104, 'long_exit': 1},
+        {'open': 104, 'high': 110, 'low': 102, 'close': 109},
     ])
     initial_state = {
         'balance': 1000.0,
@@ -80,7 +80,7 @@ def test_run_backtest_with_initial_state():
         'leverage': 1.0,
         'fee': 0.00055
     }
-    result, state = run_backtest(df, initial_state=initial_state, report=False)
+    result, state = run_backtest(df, open_position=initial_state, report=False, tp_pct=0.05)
     assert result['total_trades'] == 1
     assert state['balance'] > 1000.0
 
@@ -102,11 +102,67 @@ def test_run_backtest_tp_only():
         {'open': 100, 'high': 103, 'low': 99, 'close': 101},  # TP сработал
         {'open': 101, 'high': 101, 'low': 100, 'close': 100.5},  # ничего
     ])
-    result, state = run_backtest(df, report=False, tp_pct=0.02, sl_pct=0.10)
+    result, state = run_backtest(df, report=False, tp_pct=0.02, sl_pct=0.10, finalize=False)
 
     # Проверки
     assert result['total_trades'] == 1
     assert state['balance'] > 1000.0
     closes = [t for t in state['trades'] if 'CLOSE' in t[0]]
     assert len(closes) == 1
-    assert 'TP' in closes[0][0]  # Тип закрытия — TP
+    assert 'TP' in closes[0][0]
+
+def test_position_carries_over_between_windows():
+    df1 = pd.DataFrame({
+        "open": [99, 101, 103, 105],
+        "close": [100, 102, 104, 106],
+        "high": [101, 103, 105, 107],
+        "low": [99, 101, 103, 105],
+        "long_entry": [0, 1, 0, 0],
+        "short_entry": [0, 0, 0, 0]
+    })
+
+    result1, state1 = run_backtest(
+        df1,
+        symbol="TEST",
+        initial_balance=1000,
+        tp_pct=0.2,
+        sl_pct=0.2,
+        risk_pct=0.1,
+        report=False,
+        finalize=False
+    )
+
+    # Убедиться, что позиция открыта и НЕ закрыта
+    assert state1["position_type"] == "long", "Позиция должна быть открыта"
+    closed_trades = [t for t in state1["trades"] if t[0].startswith("CLOSE")]
+    assert len(closed_trades) == 0, "Не должно быть закрытых сделок"
+
+    # Можно игнорировать PnL или просто проверить его знак
+    assert result1["pnl"] <= 0, "PnL должен быть <= 0 (вход с комиссией)"
+
+    # Окно 2: продолжаем и закрываем по TP
+    df2 = pd.DataFrame({
+        "open": [106, 108],
+        "high": [107, 110],
+        "low": [105, 107],
+        "close": [107, 109],
+        "long_entry": [0, 0],
+        "short_entry": [0, 0]
+    })
+
+    result2, state2 = run_backtest(
+        df2,
+        symbol="TEST",
+        initial_balance=state1["balance"],
+        tp_pct=0.2,
+        sl_pct=0.2,
+        risk_pct=0.1,
+        report=False,
+        open_position=state1,
+        finalize=True
+    )
+
+    assert state2["position_type"] is None, "Позиция должна быть закрыта"
+    closed_trades = [t for t in result2["trades"] if t[0].startswith("AUTO SELL")]
+    assert len(closed_trades) == 1, "Ожидается один завершённый трейд"
+    assert result2["pnl"] > 0, "Должна быть прибыль после TP"

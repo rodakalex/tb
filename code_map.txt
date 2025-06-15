@@ -24,7 +24,7 @@ File: trading_analysis/risk.py
   def calculate_position_size()
     calls → all
     calls → isinstance
-  def calculate_sl_pct_from_atr()
+    calls → print
   def generate_dynamic_tp_sl()
   def calculate_inverse_balance_risk()
     calls → logger.debug
@@ -43,19 +43,16 @@ File: trading_analysis/backtest.py
     calls → len
     calls → print
   def _process_take_profit()
-    calls → row.get
   def _process_stop_loss()
-    calls → calculate_sl_pct_from_atr
-    calls → row.get
   def _open_position()
     calls → row.get
   def _close_position_by_signal()
+    calls → int
     calls → row.get
   def max_streak()
     calls → len
     calls → max
   def analyze_backtest()
-    calls → abs
     calls → isinstance
     calls → len
     calls → max_streak
@@ -65,10 +62,10 @@ File: trading_analysis/backtest.py
     calls → min
     calls → print
     calls → sum
-  def _prepare_tp_sl()
-    calls → calculate_sl_pct_from_atr
   def _handle_active_position()
-    calls → func
+    calls → _process_stop_loss
+    calls → _process_take_profit
+    calls → checker
     calls → state.update
     calls → state['trades'].append
   def _try_open_position()
@@ -102,7 +99,6 @@ File: trading_analysis/backtest.py
     calls → _finalize_position
     calls → _handle_active_position
     calls → _maybe_force_close
-    calls → _prepare_tp_sl
     calls → _save_and_report
     calls → _try_open_position
     calls → analyze_backtest
@@ -501,6 +497,41 @@ File: trading_analysis/tests/test_risk.py
   def test_calculate_position_size_high_sl_pct()
     calls → abs
     calls → calculate_position_size
+
+File: trading_analysis/tests/test_backtest.py
+  def make_long_test_df()
+    calls → pd.DataFrame
+  def test_run_backtest_basic_long_trade()
+    calls → len
+    calls → make_long_test_df
+    calls → run_backtest
+  def make_short_test_df()
+    calls → pd.DataFrame
+  def test_run_backtest_skips_report()
+    calls → make_long_test_df
+    calls → mock_save_and_report.assert_called_once
+    calls → patch
+    calls → run_backtest
+  def test_run_backtest_basic_short_trade()
+    calls → all
+    calls → isinstance
+    calls → len
+    calls → make_short_test_df
+    calls → run_backtest
+  def test_run_backtest_sl_only()
+    calls → pd.DataFrame
+    calls → run_backtest
+  def test_run_backtest_with_initial_state()
+    calls → pd.DataFrame
+    calls → run_backtest
+  def test_run_backtest_finalize_false()
+    calls → any
+    calls → pd.DataFrame
+    calls → run_backtest
+  def test_run_backtest_tp_only()
+    calls → len
+    calls → pd.DataFrame
+    calls → run_backtest
 
 File: trading_analysis/tests/test_signals.py
   def get_minimal_test_df()

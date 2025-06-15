@@ -13,7 +13,7 @@ from trading_analysis.charts import plot_backtest_progress
 
 from strategy.objective import estimate_window_size_from_params, optimize_with_validation
 from strategy.search_space import search_space
-from trading_analysis.utils import sanitize_params, split_train_val
+from trading_analysis.utils import prepare_params_for_logging, sanitize_params, split_train_val
 
 def initialize_test(symbol: str, interval: str = "30") -> dict:
     """
@@ -43,6 +43,7 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
         "win_streak": 0,
         "risk_history": [],
         "search_space": search_space,
+        "open_position": None,
     }
 
 def load_initial_train_data(symbol: str, window_size: int, start_timestamp: int, interval: str):
@@ -146,7 +147,7 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
 
     return df_full.iloc[-len(df_test):]
 
-def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_pct: float) -> tuple:
+def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_pct: float, open_position: dict = None) -> tuple:
     """
     Проводит бэктест на тестовом окне и возвращает результат и обновлённый баланс.
 
@@ -156,20 +157,31 @@ def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_p
     :param risk_pct: риск на сделку в долях (например, 0.05 = 5%)
     :return: (результат бэктеста, новый баланс)
     """
-    result, _ = run_backtest(
+    result, final_state = run_backtest(
         df_test_prepared,
         symbol=symbol,
         report=True,
         finalize=True,
         initial_balance=current_balance,
         leverage=1,
-        risk_pct=risk_pct
+        risk_pct=risk_pct,
+        open_position=open_position
     )
 
-    new_balance = current_balance + result["pnl"]
-    return result, new_balance
+    if final_state["position_type"]:
+        new_open_position = {
+            "position_type": final_state["position_type"],
+            "entry_price": final_state["entry_price"],
+            "position_size": final_state["position"],
+            "trades": final_state["trades"]
+        }
+    else:
+        new_open_position = None
 
-def update_tracking(config: dict, result: dict, df_test, df_test_prepared):
+    new_balance = current_balance + result["pnl"]
+    return result, new_balance, new_open_position
+
+def update_tracking(config: dict, interval, result: dict, df_test, df_test_prepared):
     """
     Обновляет журнал трейдов, сохраняет результаты модели и метрики.
 
@@ -192,11 +204,12 @@ def update_tracking(config: dict, result: dict, df_test, df_test_prepared):
         "date": test_date.strftime("%Y-%m-%d"),
         "pnl": result["pnl"]
     })
-
+    params_clean = prepare_params_for_logging(config["best_params"], config)
     save_model_run(
         symbol=symbol,
+        interval=interval,
         date=test_date,
-        params=best_params,
+        params=params_clean,
         loss=-result["winrate"],
         pnl=result["pnl"],
         total_trades=result["total_trades"],
@@ -385,8 +398,8 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         update_window_size(config)
         config["risk_pct"] = calculate_inverse_balance_risk(config["balance"], config["initial_balance"])
 
-        result, config["balance"] = run_evaluation(df_test_prepared, symbol, config["balance"], config["risk_pct"])
-        update_tracking(config, result, df_test, df_test_prepared)
+        result, config["balance"], config["open_position"] = run_evaluation(df_test_prepared, symbol, config["balance"], config["risk_pct"], open_position=config.get("open_position"))
+        update_tracking(config, interval, result, df_test, df_test_prepared)
 
         if config["balance"] < 500:
             plot_backtest_progress(config["trade_log"], title="История поражения")
