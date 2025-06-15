@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from pathlib import Path
 
-verbose = True
+verbose = False
 
 from trading_analysis.risk import calculate_position_size
 
@@ -296,7 +296,8 @@ def _maybe_force_close(state, row):
 
 def _finalize_position(state, df):
     if state['position_type'] and state['position'] > 0:
-        print("🚪 Форсируем закрытие в конце:", state)
+        if verbose:
+            print("🚪 Форсируем закрытие в конце:", state)
         final_price = df["close"].iloc[-1]
 
         if state['position_type'] == 'long':

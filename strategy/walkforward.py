@@ -161,7 +161,7 @@ def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_p
         df_test_prepared,
         symbol=symbol,
         report=True,
-        finalize=True,
+        finalize=False,
         initial_balance=current_balance,
         leverage=1,
         risk_pct=risk_pct,
@@ -341,13 +341,6 @@ def update_window_size(config):
     config["window_size"] = int((1 - alpha) * config["window_size"] + alpha * new_window)
     print(f"📐 Новый window_size: {config['window_size']}")
 
-def update_bad_days(config, result):
-    if result["pnl"] <= 0:
-        config["bad_days"] += 1
-    else:
-        config["bad_days"] = 0
-        config["win_streak"] += 1
-
 def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol):
     print("🔁 Переоптимизация из-за серии убыточных дней.")
     best_params, sharpe_train, sharpe_val = optimize_with_validation(
@@ -367,6 +360,25 @@ def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol):
             "sharpe_val": sharpe_val
         })
 
+def should_trigger_restart(result, config) -> bool:
+    if result["final_balance"] < config["initial_balance"] * 0.9:
+        return True
+
+    if result["max_loss_streak"] >= 3:
+        return True
+
+    if result["total_trades"] == 0:
+        config["no_trade_windows"] = config.get("no_trade_windows", 0) + 1
+        if config["no_trade_windows"] >= 2:
+            return True
+    else:
+        config["no_trade_windows"] = 0  # сброс, если сделки появились
+
+    if result["winrate"] < 0.4:
+        return True
+
+    return False
+
 def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
     config = initialize_test(symbol, interval)
     df_train = load_initial_train_data(
@@ -375,7 +387,6 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         start_timestamp=config["first_ts"],
         interval=interval,
     )
-    config['bad_days'] = 0
 
     while True:
         test_range, df_test = get_next_test_window(df_train, config, symbol, interval)
@@ -405,10 +416,10 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
             plot_backtest_progress(config["trade_log"], title="История поражения")
             return
 
-        update_bad_days(config, result)
-
-        if config["bad_days"] >= 2:
+        if should_trigger_restart(result, config):
+            print("🔁 Условия перезапуска модели выполнены")
             reoptimize_strategy(config, df_train_raw, df_val_raw, symbol)
+            config["no_trade_windows"] = 0  # сброс счётчика
 
         df_train = update_training_window(df_train, df_test, config["step_candles"])
 
