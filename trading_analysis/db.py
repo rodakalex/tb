@@ -104,12 +104,15 @@ def load_ohlcv_from_db(
 
     return df
 
-def get_latest_timestamp(symbol: str) -> int:
+def get_latest_timestamp(symbol: str, interval: str = "30") -> int:
     session = SessionLocal()
-    result = session.query(func.max(Candle.timestamp)).filter(Candle.symbol == symbol).scalar()
+    result = session.query(func.max(Candle.timestamp)).filter(
+        Candle.symbol == symbol,
+        Candle.interval == interval
+    ).scalar()
     session.close()
-    
     return result or 0
+
 
 def fetch_and_save_all_ohlcv(symbol: str, interval: str = "30", batch_limit: int = 1000):
     print(f"📦 Загружаем ВСЕ исторические свечи для {symbol} ({interval}m)...")
@@ -276,3 +279,10 @@ def get_first_candle_from_db(symbol: str, interval: str = "30") -> pd.Series:
     finally:
         session.close()
 
+def ensure_data_loaded(symbol: str = "BTCUSDT", interval: str = "30m"):
+    print(f"[DEBUG] 🔎 Проверка данных для {symbol}, интервал: {interval}")
+    init_db()
+    print("[DEBUG] ✅ База инициализирована")
+    
+    has_data = safe_check_ohlcv_integrity(symbol=symbol, interval=interval)
+    print(f"[DEBUG] 📊 Данные найдены? {'Да' if has_data else 'Нет'}")

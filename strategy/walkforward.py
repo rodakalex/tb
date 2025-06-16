@@ -7,13 +7,15 @@ from trading_analysis.db import get_first_candle_from_db, load_ohlcv_from_db, sa
 from trading_analysis.feature_selection import select_important_features
 from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.risk import calculate_inverse_balance_risk
-from trading_analysis.signals import generate_signals_cached
+from trading_analysis.signals import generate_signals, generate_signals_cached
 from trading_analysis.backtest import run_backtest
 from trading_analysis.charts import plot_backtest_progress
 
 from strategy.objective import estimate_window_size_from_params, optimize_with_validation
 from strategy.search_space import search_space
 from trading_analysis.utils import prepare_params_for_logging, sanitize_params, split_train_val
+
+verbose = False
 
 def initialize_test(symbol: str, interval: str = "30") -> dict:
     """
@@ -115,37 +117,36 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
     df_full = pd.concat([df_train, df_test])
     sanitized_params = sanitize_params(best_params)
 
-    # Генерируем хэши
     df_hash = hash_dataframe(df_full)
     params_serialized = json.dumps(sanitized_params, sort_keys=True)
 
-    # Вызываем кэш-функции
     df_full = calculate_indicators_cached(df_hash, df_full, sanitized_params)
     df_full = generate_signals_cached(df_full, params_serialized)
 
-    # 🔍 Отбор признаков только один раз, если их ещё нет
+    # 🔍 Отбор признаков, если они ещё не заданы
     if "enabled_long_signals" not in best_params or "enabled_short_signals" not in best_params:
         print("🧠 Отбираем важные признаки с mutual_info_classif...")
-        
-        # Long
-        feature_cols_long = [
-            col for col in df_full.columns
-            if col.startswith("long_") and "_score" not in col and "_entry" not in col
-        ]
-        important_feats_long, _ = select_important_features(df_full, feature_cols_long, target_col="long_entry")
-        best_params["enabled_long_signals"] = important_feats_long
-        print("📌 Важные long признаки:", important_feats_long)
 
-        # Short
-        feature_cols_short = [
-            col for col in df_full.columns
-            if col.startswith("short_") and "_score" not in col and "_entry" not in col
-        ]
-        important_feats_short, _ = select_important_features(df_full, feature_cols_short, target_col="short_entry")
-        best_params["enabled_short_signals"] = important_feats_short
-        print("📌 Важные short признаки:", important_feats_short)
+        for side in ["long", "short"]:
+            feature_cols = [
+                col for col in df_full.columns
+                if col.startswith(f"{side}_") and "_score" not in col and "_entry" not in col
+            ]
+            target_col = f"{side}_entry"
+            vc = df_full[target_col].value_counts()
+
+            if len(vc) < 2:
+                print(f"⚠️ Недостаточно классов в {target_col} для выбора признаков")
+                selected = []
+            else:
+                selected, _ = select_important_features(df_full, feature_cols, target_col=target_col)
+                selected = [s.replace(f"{side}_", "") for s in selected]
+
+            best_params[f"enabled_{side}_signals"] = selected
+            print(f"📌 Важные {side} признаки:", selected)
 
     return df_full.iloc[-len(df_test):]
+
 
 def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_pct: float, open_position: dict = None) -> tuple:
     """
@@ -287,19 +288,31 @@ def get_next_test_window(df_train, config, symbol, interval):
 def initialize_best_params(config, df_train_raw, df_val_raw):
     df_full = pd.concat([df_train_raw, df_val_raw])
     df_hash = hash_dataframe(df_full)
-    dummy_params = {}
+    dummy_params = {
+        "use_atr_filter": False,
+        "use_trend_filter": False,
+        "use_ema200_down_filter": False,
+        "long_score_threshold": 1,
+        "short_score_threshold": 1,
+    }
 
     df_full = calculate_indicators_cached(df_hash, df_full, dummy_params)
-    df_full = generate_signals_cached(df_full, json.dumps(dummy_params))
+    df_full = generate_signals(df_full, dummy_params)
 
     feature_cols_long = [col for col in df_full.columns if col.startswith("long_") and "_score" not in col and "_entry" not in col]
     feature_cols_short = [col for col in df_full.columns if col.startswith("short_") and "_score" not in col and "_entry" not in col]
+    
+    if verbose:
+        print("long_entry class distribution:")
+        print(df_full["long_entry"].value_counts())
+        print(df_full[["long_score", "atr_filter", "long_entry"]].tail(10))
+        print(df_full[[col for col in df_full.columns if col.startswith("long_") and not col.endswith("_score") and not col.endswith("_entry")]].sum())
 
     important_feats_long, _ = select_important_features(df_full, feature_cols_long, target_col="long_entry")
-    important_feats_short, _ = select_important_features(df_full, feature_cols_short, target_col="short_entry")
+    important_feats_long = [s.replace("long_", "") for s in important_feats_long]
 
-    print("\n📌 Отобранные признаки (long):", important_feats_long)
-    print("📌 Отобранные признаки (short):", important_feats_short)
+    important_feats_short, _ = select_important_features(df_full, feature_cols_short, target_col="short_entry")
+    important_feats_short = [s.replace("short_", "") for s in important_feats_short]
 
     best_params, sharpe_train, sharpe_val = optimize_with_validation(
         df_train_raw, df_val_raw, config["symbol"], search_space,
@@ -318,13 +331,6 @@ def initialize_best_params(config, df_train_raw, df_val_raw):
         "sharpe_val": sharpe_val
     })
     return True
-
-def try_prepare_test_data(df_train, df_test, config):
-    try:
-        return prepare_test_data(df_train, df_test, config["best_params"])
-    except Exception as e:
-        print(f"⚠ Пропуск дня — ошибка подготовки данных: {e}")
-        return None
 
 def update_window_size(config):
     new_window = estimate_window_size_from_params(config["best_params"], verbose=True)
@@ -402,7 +408,7 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
                 df_train = update_training_window(df_train, df_test, config["step_candles"])
                 continue
 
-        df_test_prepared = try_prepare_test_data(df_train, df_test, config)
+        df_test_prepared = prepare_test_data(df_train, df_test, config["best_params"])
         if df_test_prepared is None:
             df_train = update_training_window(df_train, df_test, config["step_candles"])
             continue

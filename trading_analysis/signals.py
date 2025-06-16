@@ -5,6 +5,82 @@ import pandas_ta as ta
 import json
 from trading_analysis.cache import memory
 
+LONG_SIGNAL_FUNCS = {}
+SHORT_SIGNAL_FUNCS = {}
+
+verbose = False
+
+def register_signal(name, long=True):
+    def decorator(func):
+        (LONG_SIGNAL_FUNCS if long else SHORT_SIGNAL_FUNCS)[name] = func
+        return func
+    return decorator
+
+@register_signal("macd", long=True)
+def long_macd(df):
+    if "MACD" in df and "Signal" in df:
+        return ((df["MACD"] > df["Signal"]) & (df["MACD"].shift(1) <= df["Signal"].shift(1)) & (df["MACD"] > 0)).astype(int)
+    return pd.Series(0, index=df.index)
+
+@register_signal("macd", long=False)
+def short_macd(df):
+    if "MACD" in df and "Signal" in df:
+        return ((df["MACD"] < df["Signal"]) & (df["MACD"].shift(1) >= df["Signal"].shift(1)) & (df["MACD"] < 0)).astype(int)
+    return pd.Series(0, index=df.index)
+
+@register_signal("rsi", long=True)
+def long_rsi(df):
+    if "RSI" in df:
+        return ((df["RSI"] > 45) & (df["RSI"] < 75)).astype(int)
+    return pd.Series(0, index=df.index)
+
+@register_signal("rsi", long=False)
+def short_rsi(df):
+    return (df["RSI"] < 35).astype(int)
+
+@register_signal("roc", long=True)
+def long_roc(df):
+    if "ROC" in df:
+        return (df["ROC"] > 1).astype(int)
+    return pd.Series(0, index=df.index)
+
+@register_signal("roc", long=False)
+def short_roc(df):
+    if "ROC" in df:
+        return (df["ROC"] < -1).astype(int)
+    return pd.Series(0, index=df.index)
+
+@register_signal("mfi", long=False)
+def short_mfi(df):
+    return (df["MFI"] > 70).astype(int)
+
+@register_signal("cci", long=False)
+def short_cci(df):
+    return (df["CCI"] > 100).astype(int)
+
+@register_signal("bb_rebound", long=False)
+def short_bb_rebound(df):
+    return (df["close"] > df["BBM"]).astype(int)
+
+@register_signal("below_ema9", long=False)
+def short_below_ema9(df):
+    return (df["close"] < df["EMA_9"]).astype(int)
+
+@register_signal("donchian", long=False)
+def short_donchian(df):
+    return (df["close"] < df["low"].rolling(20, min_periods=1).min()).astype(int)
+
+@register_signal("tema_cross", long=False)
+def short_tema_cross(df):
+    return (df["TEMA_9"] < df["TEMA_21"]).astype(int)
+
+@register_signal("stochrsi", long=False)
+def short_stochrsi(df):
+    if "StochRSI_K" not in df or "StochRSI_D" not in df:
+        return None
+    return ((df["StochRSI_K"] > 80) & (df["StochRSI_D"] > 80)).astype(int)
+
+
 @memory.cache
 def generate_signals_cached(df, params_serialized):
     if isinstance(params_serialized, dict):
@@ -13,10 +89,15 @@ def generate_signals_cached(df, params_serialized):
         params = json.loads(params_serialized)
     return generate_signals(df, params)
 
-def safe_assign(df, col_name, series, dtype="float64"):
-    df[col_name] = series.astype(dtype)
+@register_signal("volume_above_avg", long=True)
+def long_volume_above_avg(df):
+    return (df["volume"] > df.get("Volume_SMA_20", df["volume"])).astype(int)
 
 def generate_signals(df, params=None):
+    if verbose:
+        print("use_atr_filter:", params.get("use_atr_filter", True))
+    
+    import numpy as np
     df = df.copy()
     if params is None:
         params = {}
@@ -24,122 +105,63 @@ def generate_signals(df, params=None):
     def p(key, default=1):
         return params.get(key, default)
 
-    # --- Индикаторы и фильтры ---
-    df["ATR"] = ta.atr(df["high"], df["low"], df["close"], length=14)
-    df["volume_above_avg"] = (df["volume"] > df["Volume_SMA_20"]).astype(int)
-    df["atr_filter"] = (df["ATR"] > df["ATR"].rolling(50).mean()).astype(int)
-    df["ema200_down"] = (df["EMA_200"].diff() < 0).astype(int)
+    # Бинарные фильтры
+    df["volume_above_avg"] = (df["volume"] > df.get("Volume_SMA_20", df["volume"])).astype(int)
+    df["atr_filter"] = (
+        (df["ATR"] > df["ATR"].rolling(50).mean()) if "ATR" in df
+        else pd.Series(False, index=df.index)
+    ).astype(int)
+
+    df["ema200_down"] = (df.get("EMA_200").diff() < 0 if "EMA_200" in df else False).astype(int)
     df["volume_peak"] = (df["volume"] > df["volume"].rolling(10).max().shift(1)).astype(int)
-    df["bbp_filter"] = (df["BBP"] > 0.5).astype(int)
+    df["bbp_filter"] = (df.get("BBP", 0) > 0.5).astype(int)
 
-    df["long_macd"] = ((df["MACD"] > df["Signal"]) & (df["MACD"].shift(1) <= df["Signal"].shift(1)) & (df["MACD"] > 0)).astype(int)
-    df["short_macd"] = ((df["MACD"] < df["Signal"]) & (df["MACD"].shift(1) >= df["Signal"].shift(1)) & (df["MACD"] < 0) & (df["Signal"] < 0)).astype(int)
+    # Сигналы
+    long_signals = params.get("enabled_long_signals", list(LONG_SIGNAL_FUNCS))
+    short_signals = params.get("enabled_short_signals", list(SHORT_SIGNAL_FUNCS))
 
-    df["long_rsi"] = ((df["RSI"] > 45) & (df["RSI"] < 75)).astype(int)
-    df["short_rsi"] = (df["RSI"] < 50).astype(int)
+    if verbose:
+        for name in long_signals:
+            if name in LONG_SIGNAL_FUNCS:
+                signal_series = LONG_SIGNAL_FUNCS[name](df)
+                print(f"📈 Signal {name} sum:", signal_series.sum())
+                df[f"long_{name}"] = signal_series
 
-    df["long_ema_cross"] = (df["EMA_9"] > df["EMA_21"]).astype(int)
-    df["short_ema_cross"] = (df["EMA_9"] < df["EMA_21"]).astype(int)
 
-    df["long_trend"] = (df["close"] > df["EMA_200"]).astype(int)
-    df["short_trend"] = (df["close"] < df["EMA_200"]).astype(int)
+    for name in long_signals:
+        if name in LONG_SIGNAL_FUNCS:
+            df[f"long_{name}"] = LONG_SIGNAL_FUNCS[name](df)
 
-    df["short_bb_rebound"] = (df["close"] > df["BBM"]).astype(int)
-    df["short_below_ema9"] = (df["close"] < df["EMA_9"]).astype(int)
+    for name in short_signals:
+        if name in SHORT_SIGNAL_FUNCS:
+            signal_series = SHORT_SIGNAL_FUNCS[name](df)
+            if signal_series is not None:
+                df[f"short_{name}"] = signal_series
 
-    df["CCI"] = ta.cci(df["high"], df["low"], df["close"], length=20)
 
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=FutureWarning)
-        df["MFI"] = ta.mfi(df["high"], df["low"], df["close"], df["volume"], length=14)
-
-    stochrsi = ta.stochrsi(df["close"], length=14)
-    if stochrsi is not None and "STOCHRSIk_14_14_3_3" in stochrsi:
-        df["StochRSI_K"] = stochrsi["STOCHRSIk_14_14_3_3"]
-        df["StochRSI_D"] = stochrsi["STOCHRSId_14_14_3_3"]
-    else:
-        df["StochRSI_K"] = np.nan
-        df["StochRSI_D"] = np.nan
-
-    df["ADX"] = ta.adx(df["high"], df["low"], df["close"], length=14)["ADX_14"]
-    df["volume_zscore"] = ((df["volume"] - df["volume"].rolling(20).mean()) / df["volume"].rolling(20).std()).fillna(0)
-
-    df["long_stochrsi"] = ((df["StochRSI_K"] < 20) & (df["StochRSI_K"] > df["StochRSI_D"])).astype(int)
-    df["short_stochrsi"] = ((df["StochRSI_K"] > 80) & (df["StochRSI_K"] < df["StochRSI_D"])).astype(int)
-    df["long_cci"] = (df["CCI"] < -100).astype(int)
-    df["short_cci"] = (df["CCI"] > 100).astype(int)
-    df["long_mfi"] = (df["MFI"] < 30).astype(int)
-    df["short_mfi"] = (df["MFI"] > 70).astype(int)
-    df["trend_strength"] = (df["ADX"] > 20).astype(int)
-    use_custom_roc = p("use_custom_roc", False)
-    
-    if not use_custom_roc:
-        df["ROC"] = ta.roc(df["close"], length=5)
-    df["long_roc"] = (df["ROC"] > 1).astype(int)
-    df["short_roc"] = (df["ROC"] < -1).astype(int)
-
-    df["volume_spike"] = (df["volume_zscore"] > 2).astype(int)
-
-    donchian_high = df["high"].rolling(window=20).max()
-    donchian_low = df["low"].rolling(window=20).min()
-    df["long_donchian"] = (df["close"] > donchian_high.shift(1)).astype(int)
-    df["short_donchian"] = (df["close"] < donchian_low.shift(1)).astype(int)
-
-    tema_9 = ta.tema(df["close"], length=9)
-    tema_21 = ta.tema(df["close"], length=21)
-
-    df["TEMA_9"] = tema_9 if tema_9 is not None else pd.Series([np.nan] * len(df), index=df.index)
-    df["TEMA_21"] = tema_21 if tema_21 is not None else pd.Series([np.nan] * len(df), index=df.index)
-
-    df["long_tema_cross"] = (df["TEMA_9"] > df["TEMA_21"]).astype(int)
-    df["short_tema_cross"] = (df["TEMA_9"] < df["TEMA_21"]).astype(int)
-
-    # --- Score через enabled_signals ---
-    default_long = [
-        "long_ema_cross", "long_trend", "long_rsi", "long_macd", "long_stochrsi",
-        "long_cci", "long_mfi", "volume_above_avg", "volume_spike",
-        "long_roc", "long_donchian", "long_tema_cross"
-    ]
-    default_short = [
-        "short_ema_cross", "short_trend", "short_rsi", "short_macd", "short_stochrsi",
-        "short_cci", "short_mfi", "short_bb_rebound", "short_below_ema9",
-        "volume_above_avg", "volume_spike", "short_roc", "short_donchian", "short_tema_cross"
-    ]
-
-    long_signals = params.get("enabled_long_signals", default_long)
-    short_signals = params.get("enabled_short_signals", default_short)
-
+    # Score
     df["long_score"] = sum(
-        df[signal] * p(f"w_{signal.split('long_')[-1]}", 1)
-        for signal in long_signals
-        if signal in df
+        df[f"long_{s}"] * p(f"w_{s}", 1)
+        for s in long_signals if f"long_{s}" in df
     )
-
     df["short_score"] = sum(
-        df[signal] * p(f"w_{signal.split('short_')[-1]}", 1)
-        for signal in short_signals
-        if signal in df
+        df[f"short_{s}"] * p(f"w_{s}", 1)
+        for s in short_signals if f"short_{s}" in df
     )
 
-    # --- Флаги для гибкого управления фильтрами ---
-    long_entry = df["long_score"] >= p("long_score_threshold", 5)
-    use_atr = p("use_atr_filter", True)
-    if use_atr:
-        long_entry &= df["atr_filter"] == 1
+    # Entry
+    df["long_entry"] = df["long_score"] >= p("long_score_threshold", 5)
+    df["short_entry"] = df["short_score"] >= p("short_score_threshold", 5)
 
-    use_trend = p("use_trend_filter", True)
-    if use_trend:
-        long_entry &= df["trend_strength"] == 1
 
-    short_entry = df["short_score"] >= p("short_score_threshold", 5)
-    if use_atr:
-        short_entry &= df["atr_filter"] == 1
+    # if verbose:
+    #     print("📋 Сигналы на вход (long):", long_signals)
+
+
+    
+    if p("use_trend_filter", True) and "trend_strength" in df:
+        df["long_entry"] &= df["trend_strength"] == 1
     if p("use_ema200_down_filter", True):
-        short_entry &= df["ema200_down"] == 1
-
-    df["long_entry"] = long_entry
-    df["short_entry"] = short_entry
+        df["short_entry"] &= df["ema200_down"] == 1
 
     return df
-

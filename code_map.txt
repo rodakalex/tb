@@ -56,6 +56,7 @@ File: trading_analysis/backtest.py
     calls → isinstance
     calls → len
     calls → max_streak
+    calls → print
     calls → sum
   def _print_backtest_results()
     calls → len
@@ -66,6 +67,7 @@ File: trading_analysis/backtest.py
     calls → _process_stop_loss
     calls → _process_take_profit
     calls → checker
+    calls → print
     calls → state.update
     calls → state['trades'].append
   def _try_open_position()
@@ -79,6 +81,7 @@ File: trading_analysis/backtest.py
     calls → state.update
     calls → state['trades'].append
   def _finalize_position()
+    calls → print
     calls → state.update
     calls → state['trades'].append
   def _save_to_csv()
@@ -103,7 +106,9 @@ File: trading_analysis/backtest.py
     calls → _try_open_position
     calls → analyze_backtest
     calls → df.iterrows
-    calls → initial_state.copy
+    calls → open_position.get
+    calls → print
+    calls → state.update
   def plot_equity_curve()
     calls → equity.append
     calls → equity_df.to_csv
@@ -157,16 +162,38 @@ File: trading_analysis/executor.py
 
 File: trading_analysis/feature_selection.py
   def select_important_features()
-    calls → MinMaxScaler
-    calls → MinMaxScaler().fit_transform
+    calls → ValueError
     calls → df[feature_cols + [target_col]].dropna
-    calls → df_clean[feature_cols].astype
     calls → df_clean[target_col].astype
-    calls → importance_df.query
-    calls → importance_df.query('importance >= @min_importance')['feature'].tolist
+    calls → importance_df[importance_df['importance'] >= min_importance]['feature'].tolist
+    calls → len
     calls → mutual_info_classif
+    calls → np.unique
     calls → pd.DataFrame
     calls → pd.DataFrame({'feature': feature_cols, 'importance': importances}).sort_values
+    calls → pd.api.types.is_integer_dtype
+    calls → print
+  def test_raises_on_single_class_target()
+    calls → np.random.rand
+    calls → pd.DataFrame
+    calls → pytest.raises
+    calls → select_important_features
+  def test_returns_empty_when_no_important_features()
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → pd.DataFrame
+    calls → select_important_features
+  def test_select_important_features_verbose_capfd()
+    calls → isinstance
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → pd.DataFrame
+    calls → select_important_features
+  def test_random_state_makes_result_deterministic()
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → pd.DataFrame
+    calls → select_important_features
 
 File: trading_analysis/signals.py
   def generate_signals_cached()
@@ -276,7 +303,6 @@ File: trading_analysis/db.py
     calls → df['timestamp'].isin
     calls → df['timestamp'].tolist
     calls → int
-    calls → len
     calls → new_rows.iterrows
     calls → print
     calls → session.bulk_save_objects
@@ -319,9 +345,11 @@ File: trading_analysis/db.py
     calls → get_bybit_kline
     calls → int
     calls → len
+    calls → pbar.update
     calls → print
     calls → save_ohlcv_to_db
     calls → time.sleep
+    calls → tqdm
   def interval_to_timedelta()
     calls → ValueError
     calls → int
@@ -447,6 +475,11 @@ File: trading_analysis/utils.py
     calls → int
     calls → isinstance
     calls → params.items
+  def prepare_params_for_logging()
+    calls → config.get
+    calls → config.get('best_params', {}).get
+    calls → convert_np
+    calls → params.copy
 
 File: trading_analysis/realtime.py
   def update_live_kline()
@@ -532,6 +565,11 @@ File: trading_analysis/tests/test_backtest.py
     calls → len
     calls → pd.DataFrame
     calls → run_backtest
+  def test_position_carries_over_between_windows()
+    calls → len
+    calls → pd.DataFrame
+    calls → run_backtest
+    calls → t[0].startswith
 
 File: trading_analysis/tests/test_signals.py
   def get_minimal_test_df()
@@ -589,7 +627,6 @@ File: trading_analysis/tests/test_signals.py
     calls → pd.DataFrame
     calls → pd.Series
     calls → pytest.fixture
-    calls → pytest.mark.parametrize
   def get_test_df_for_signal()
     calls → ValueError
     calls → df['low'].min
@@ -602,6 +639,32 @@ File: trading_analysis/tests/test_signals.py
     calls → pytest.mark.parametrize
 
 File: trading_analysis/tests/__init__.py
+
+File: trading_analysis/tests/test_utils.py
+  def test_prepare_params_for_logging_injects_signals()
+    calls → prepare_params_for_logging
+  def test_prepare_params_for_logging_handles_none()
+    calls → prepare_params_for_logging
+
+File: trading_analysis/tests/test_feature_selection.py
+  def test_select_important_features_basic()
+    calls → isinstance
+    calls → len
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → np.random.seed
+    calls → pd.DataFrame
+    calls → select_important_features
+    calls → set
+    calls → set(selected).issubset
+  def test_select_important_features_with_min_importance()
+    calls → all
+    calls → isinstance
+    calls → len
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → pd.DataFrame
+    calls → select_important_features
 
 File: strategy/objective.py
   def prepare_data()
@@ -694,6 +757,7 @@ File: strategy/walkforward.py
   def update_tracking()
     calls → config.get
     calls → df_test_prepared.index[0].to_pydatetime
+    calls → prepare_params_for_logging
     calls → result.get
     calls → save_model_run
     calls → test_date.strftime
@@ -732,11 +796,12 @@ File: strategy/walkforward.py
     calls → estimate_window_size_from_params
     calls → int
     calls → print
-  def update_bad_days()
   def reoptimize_strategy()
     calls → config.update
     calls → optimize_with_validation
     calls → print
+  def should_trigger_restart()
+    calls → config.get
   def walk_forward_test()
     calls → calculate_inverse_balance_risk
     calls → config.get
@@ -746,11 +811,55 @@ File: strategy/walkforward.py
     calls → initialize_test
     calls → load_initial_train_data
     calls → plot_backtest_progress
+    calls → print
     calls → reoptimize_strategy
     calls → run_evaluation
+    calls → should_trigger_restart
     calls → split_train_val
     calls → try_prepare_test_data
-    calls → update_bad_days
     calls → update_tracking
     calls → update_training_window
     calls → update_window_size
+
+File: strategy/tests/test_walkforward.py
+  def test_update_tracking_calls_save_model_run()
+    calls → isinstance
+    calls → len
+    calls → mock_save_model_run.assert_called_once
+    calls → patch
+    calls → pd.DataFrame
+    calls → pd.to_datetime
+    calls → update_tracking
+  def test_update_tracking_calls_save_model_run()
+    calls → isinstance
+    calls → len
+    calls → mock_save_model_run.assert_called_once
+    calls → patch
+    calls → pd.DataFrame
+    calls → pd.to_datetime
+    calls → update_tracking
+  def make()
+    calls → BASE_CONFIG.copy
+    calls → BASE_RESULT.copy
+    calls → config.update
+    calls → result.update
+  def test_drawdown_trigger()
+    calls → make
+    calls → should_trigger_restart
+  def test_max_loss_streak_trigger()
+    calls → make
+    calls → should_trigger_restart
+  def test_no_trades_once_no_trigger()
+    calls → make
+    calls → should_trigger_restart
+  def test_no_trades_twice_trigger()
+    calls → make
+    calls → should_trigger_restart
+  def test_winrate_drop_trigger()
+    calls → make
+    calls → should_trigger_restart
+  def test_no_trigger_if_all_good()
+    calls → make
+    calls → should_trigger_restart
+  def test_multiple_restart_conditions_triggered()
+    calls → should_trigger_restart

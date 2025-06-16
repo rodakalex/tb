@@ -1,6 +1,8 @@
 # trading_analysis/indicators.py
 from trading_analysis.cache import memory
 import pandas as pd
+import pandas_ta as ta
+
 
 def safe_assign_ema(df, length, col_name):
     result = df.ta.ema(length=length)
@@ -12,27 +14,50 @@ def safe_assign_ema(df, length, col_name):
 
 
 def calculate_indicators(df):
+    import warnings
+
+    df = df.copy()
     df = df.astype({
         "open": float, "high": float, "low": float,
         "close": float, "volume": float
     })
 
-    macd = df.ta.macd(fast=12, slow=26, signal=9)
-    macd.columns = ["MACD", "Signal", "Histogram"]
-
-    rsi = df.ta.rsi(length=14)
-    df["RSI"] = rsi
-    df = safe_assign_ema(df, 9, "EMA_9")
-    df = safe_assign_ema(df, 21, "EMA_21")
-    df = safe_assign_ema(df, 100, "EMA_100")
-    df = safe_assign_ema(df, 200, "EMA_200")
-
-    bbands = df.ta.bbands(length=20, std=2)
-    bbands.columns = ["BBL", "BBM", "BBU", "BBB", "BBP"]
-
+    df["ATR"] = ta.atr(df["high"], df["low"], df["close"], length=14)
+    df["RSI"] = ta.rsi(df["close"], length=14)
     df["Volume_SMA_20"] = df["volume"].rolling(window=20, min_periods=1).mean()
-    df["ATR"] = df.ta.atr(length=14)
-    df = pd.concat([df, macd, bbands], axis=1)
+
+    macd = ta.macd(df["close"], fast=12, slow=26, signal=9)
+    if macd is not None:
+        df[["MACD", "Signal", "Histogram"]] = macd
+
+    bb = ta.bbands(df["close"], length=20, std=2)
+    if bb is not None:
+        df[["BBL", "BBM", "BBU", "BBB", "BBP"]] = bb
+
+    df["EMA_9"] = ta.ema(df["close"], length=9)
+    df["EMA_21"] = ta.ema(df["close"], length=21)
+    df["EMA_100"] = ta.ema(df["close"], length=100)
+    df["EMA_200"] = ta.ema(df["close"], length=200)
+
+    df["CCI"] = ta.cci(df["high"], df["low"], df["close"], length=20)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=FutureWarning)
+        df["MFI"] = ta.mfi(df["high"], df["low"], df["close"], df["volume"], length=14)
+
+    stochrsi = ta.stochrsi(df["close"], length=14)
+    if stochrsi is not None and "STOCHRSIk_14_14_3_3" in stochrsi:
+        df["StochRSI_K"] = stochrsi["STOCHRSIk_14_14_3_3"]
+        df["StochRSI_D"] = stochrsi["STOCHRSId_14_14_3_3"]
+
+    adx = ta.adx(df["high"], df["low"], df["close"], length=14)
+    if adx is not None and "ADX_14" in adx:
+        df["ADX"] = adx["ADX_14"]
+
+    df["ROC"] = ta.roc(df["close"], length=5)
+
+    df["TEMA_9"] = ta.tema(df["close"], length=9)
+    df["TEMA_21"] = ta.tema(df["close"], length=21)
 
     return df
 

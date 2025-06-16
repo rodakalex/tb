@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from trading_analysis.indicators import calculate_indicators
 from trading_analysis.signals import generate_signals
 
 def get_minimal_test_df(n=20):
@@ -23,7 +24,8 @@ def get_minimal_test_df(n=20):
     return pd.DataFrame(data)
 
 def test_generate_signals_basic_long():
-    df = get_minimal_test_df()
+    df = get_minimal_test_df(n=250)
+    df = calculate_indicators(df)
     result = generate_signals(df)
 
     assert "long_score" in result.columns
@@ -31,16 +33,28 @@ def test_generate_signals_basic_long():
     assert result["long_entry"].iloc[-1] in [True, False]
 
 def test_macd_signal_generation():
-    df = get_minimal_test_df()
+    df = get_minimal_test_df(n=20)
+    df = calculate_indicators(df)
+    
     df["MACD"] = [0.2, 0.3, 0.6, 0.8, 1.0, 1.2, 1.5, 1.8, 2.0, 2.2, 2.5,
                   2.7, 2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6]
     df["Signal"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
                     0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
     df["EMA_200"] = np.full(len(df), 90)
+    df["EMA_9"] = df["close"]
+    df["EMA_21"] = df["close"]
+    params = {
+        "enabled_long_signals": ["macd"],
+        "enabled_short_signals": ["macd"],
+        "use_atr_filter": False,
+        "use_trend_filter": False,
+        "use_ema200_down_filter": False,
+        "long_score_threshold": 1,
+        "short_score_threshold": 1,
+    }
 
-    result = generate_signals(df)
+    result = generate_signals(df, params)
     assert (result["long_macd"] == 1).sum() > 0
-
 
 def test_empty_df():
     df = pd.DataFrame()
@@ -48,7 +62,8 @@ def test_empty_df():
         generate_signals(df)
 
 def test_threshold_param_affects_entry():
-    df = get_minimal_test_df()
+    df = get_minimal_test_df(n=250)
+    df = calculate_indicators(df)
     params = {
         "long_score_threshold": 100
     }
@@ -56,44 +71,87 @@ def test_threshold_param_affects_entry():
     assert result["long_entry"].sum() == 0
 
 def test_stochrsi_none(monkeypatch):
+    # Мокаем pandas_ta.stochrsi чтобы вернуть None
+    import pandas_ta as ta
+
     def fake_stochrsi(*args, **kwargs):
         return None
 
-    import pandas_ta as ta
     monkeypatch.setattr(ta, "stochrsi", fake_stochrsi)
 
-    df = get_minimal_test_df()
-    result = generate_signals(df)
-    assert "StochRSI_K" in result.columns
-    assert result["StochRSI_K"].isna().all()
+    df = get_minimal_test_df(n=250)
+    df = calculate_indicators(df)
+
+    # Убедимся, что StochRSI не рассчитан
+    assert "StochRSI_K" not in df.columns
+    assert "StochRSI_D" not in df.columns
+
+    # А generate_signals всё ещё работает, не требует этих колонок
+    params = {
+        "enabled_long_signals": ["stochrsi"],
+        "enabled_short_signals": ["stochrsi"],
+        "use_atr_filter": False,
+        "use_trend_filter": False,
+        "use_ema200_down_filter": False,
+        "long_score_threshold": 1,
+        "short_score_threshold": 1,
+    }
+
+    result = generate_signals(df, params)
+
+    # Убедимся, что signal-колонка не появилась
+    assert "long_stochrsi" not in result.columns
+    assert "short_stochrsi" not in result.columns
+
+def test_stochrsi_present():
+    import numpy as np
+    df = pd.DataFrame({
+        "close": np.random.uniform(100, 110, 100),
+        "high": np.random.uniform(101, 111, 100),
+        "low": np.random.uniform(99, 109, 100),
+        "open": np.random.uniform(100, 110, 100),
+        "volume": np.random.uniform(1000, 2000, 100),
+    })
+    df = calculate_indicators(df)
+
+    assert "StochRSI_K" in df.columns
+    assert "StochRSI_D" in df.columns
+    assert df["StochRSI_K"].isna().sum() < len(df)  # не всё NaN
 
 def test_custom_long_signals_only_volume():
-    df = get_minimal_test_df()
+    df = get_minimal_test_df(n=250)
+    df = calculate_indicators(df)
     params = {
         "enabled_long_signals": ["volume_above_avg"],
         "long_score_threshold": 1,
-        "w_volume": 1
+        "w_volume_above_avg": 1
     }
     result = generate_signals(df, params=params)
 
+    # ✅ это поле действительно участвует в long_score
     assert set(result["long_score"].unique()).issubset({0, 1})
-    assert (result["long_score"] == result["volume_above_avg"]).all()
+    assert (result["long_score"] == result["long_volume_above_avg"]).all()
+
+
 
 def test_generate_signals_short_entry():
-    df = get_minimal_test_df()
+    df = get_minimal_test_df(n=250)
+    df = calculate_indicators(df)
     df["EMA_200"] = df["EMA_200"] + np.linspace(10, -10, len(df))  # сделать downtrend
     result = generate_signals(df)
     assert "short_entry" in result.columns
     assert result["short_entry"].iloc[-1] in [True, False]
 
 def test_trend_strength_filter_blocks_entry():
-    df = get_minimal_test_df()
+    df = get_minimal_test_df(n=250)
+    df = calculate_indicators(df)
     df["ADX"] = 10  # недостаточно для trend_strength
     result = generate_signals(df)
     assert result["long_entry"].sum() == 0
 
 def test_short_entry_from_roc_only():
     df = get_minimal_test_df(n=80)
+    df = calculate_indicators(df)
     df["ROC"] = -2
     df["EMA_200"] = np.linspace(120, 100, len(df))
     df["close"] = np.linspace(100, 120, len(df))
@@ -102,7 +160,7 @@ def test_short_entry_from_roc_only():
     df["volume"] = 1000
 
     params = {
-        "enabled_short_signals": ["short_roc"],
+        "enabled_short_signals": ["roc"],
         "short_score_threshold": 1,
         "use_atr_filter": False,
         "use_ema200_down_filter": False,
@@ -157,40 +215,40 @@ def get_test_df_for_signal(signal_name: str, n: int = 30) -> pd.DataFrame:
     i = n - 1
     i_prev = n - 2
 
-    if signal_name == "short_macd":
+    if signal_name == "macd":
         df.loc[i - 1,   "MACD"] = -0.4
         df.loc[i - 1, "Signal"] = -0.6
         df.loc[i,       "MACD"] = -0.6
         df.loc[i,     "Signal"] = -0.4
-    elif signal_name == "short_rsi":
+    elif signal_name == "rsi":
         df.loc[i, "RSI"] = 30
 
-    elif signal_name == "short_mfi":
+    elif signal_name == "mfi":
         df.loc[i, "MFI"] = 80
 
-    elif signal_name == "short_cci":
+    elif signal_name == "cci":
         df.loc[i, "CCI"] = 120
 
-    elif signal_name == "short_bb_rebound":
+    elif signal_name == "bb_rebound":
         df.loc[i, "close"] = 105
         df.loc[i, "BBM"] = 100
 
-    elif signal_name == "short_below_ema9":
+    elif signal_name == "below_ema9":
         df.loc[i, "close"] = 95
         df.loc[i, "EMA_9"] = 100
 
-    elif signal_name == "short_roc":
+    elif signal_name == "roc":
         df.loc[i, "ROC"] = -2
 
-    elif signal_name == "short_donchian":
+    elif signal_name == "donchian":
         df["low"] = np.linspace(110, 90, n)
         df.loc[i, "close"] = df["low"].min() - 1  # явно ниже
 
-    elif signal_name == "short_tema_cross":
+    elif signal_name == "tema_cross":
         df["TEMA_9"] = 95
         df["TEMA_21"] = 100
 
-    elif signal_name == "short_stochrsi":
+    elif signal_name == "stochrsi":
         df.loc[i, "StochRSI_K"] = 90
         df.loc[i, "StochRSI_D"] = 95
 
@@ -200,9 +258,8 @@ def get_test_df_for_signal(signal_name: str, n: int = 30) -> pd.DataFrame:
     return df
 
 @pytest.mark.parametrize("signal", [
-    "short_macd", "short_rsi", "short_mfi", "short_cci", "short_bb_rebound",
-    "short_below_ema9", "short_roc", "short_donchian", "short_tema_cross",
-    "short_stochrsi"
+    "macd", "rsi", "mfi", "cci", "bb_rebound",
+    "below_ema9", "roc", "donchian", "tema_cross", "stochrsi"
 ])
 def test_individual_short_signal(signal):
     df = get_test_df_for_signal(signal)

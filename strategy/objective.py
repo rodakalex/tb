@@ -1,17 +1,19 @@
 from strategy.utils_hashing import hash_dataframe
 from trading_analysis.indicators import calculate_indicators_cached
-from trading_analysis.signals import generate_signals_cached
+from trading_analysis.signals import generate_signals, generate_signals_cached
 from trading_analysis.backtest import run_backtest
 from trading_analysis.utils import strip_indicators
 import numpy as np
 from hyperopt import fmin, tpe, Trials, STATUS_OK, space_eval
+
+verbose = False
 
 def prepare_data(df, params):
     df_clean = strip_indicators(df.copy())
     df_hash = hash_dataframe(df_clean)
     df_indicators = calculate_indicators_cached(df_hash, df_clean, params)
     
-    return generate_signals_cached(df_indicators, params)
+    return generate_signals(df_indicators, params)
 
 def optimize_with_validation(df_train, df_val, symbol, search_space, initial_params=None,
                              enabled_long_signals=None, enabled_short_signals=None, verbose=True):
@@ -62,12 +64,17 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
             params["enabled_long_signals"] = enabled_long_signals
         if enabled_short_signals is not None:
             params["enabled_short_signals"] = enabled_short_signals
-
+        
+        params["use_atr_filter"] = False
+        params["use_trend_filter"] = False
+        params["use_ema200_down_filter"] = False
+            
         df_train_prep = prepare_data(df_train, params)
         df_val_prep = prepare_data(df_val, params)
 
         train_result, _ = run_backtest(df_train_prep, symbol=symbol, report=False)
         val_result, _ = run_backtest(df_val_prep, symbol=symbol, report=False)
+
 
         # Извлечение метрик
         train_wr = train_result["winrate"]
@@ -167,7 +174,7 @@ def optimize_with_validation(df_train, df_val, symbol, search_space, initial_par
             fn=objective,
             space=search_space,
             algo=tpe.suggest,
-            max_evals=200 * (round_count + 1),
+            max_evals=10 * (round_count + 1),
             trials=trials
         )
 
