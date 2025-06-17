@@ -1,7 +1,6 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime
+from unittest.mock import patch
 import pandas as pd
+from uuid import uuid4
 
 from strategy.walkforward import should_trigger_restart, update_tracking
 
@@ -18,7 +17,8 @@ def test_update_tracking_calls_save_model_run(mock_save_model_run):
         "balance": 1000,
         "trade_log": [],
         "best_params": {"long_score_threshold": 7},
-        "days_elapsed": 0
+        "days_elapsed": 0,
+        "session_uuid": str(uuid4())
     }
 
     result = {
@@ -33,19 +33,18 @@ def test_update_tracking_calls_save_model_run(mock_save_model_run):
     assert config["days_elapsed"] == 1
     mock_save_model_run.assert_called_once()
 
-    args, kwargs = mock_save_model_run.call_args
+    _, kwargs = mock_save_model_run.call_args
 
     assert kwargs["symbol"] == "BTCUSDT"
     assert kwargs["pnl"] == 10
     assert kwargs["winrate"] == 0.6
-    assert kwargs["retrained"] is False  # потому что pnl > 0
+    assert kwargs["retrained"] is False
+    assert kwargs["balance"] == 1000
+    assert kwargs["best_params"] == {"long_score_threshold": 7}
     assert isinstance(kwargs["params"], dict)
-import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime
-import pandas as pd
+    assert "long_score_threshold" in kwargs["params"]
 
-from strategy.walkforward import should_trigger_restart, update_tracking
+
 
 @patch("strategy.walkforward.save_model_run")
 def test_update_tracking_calls_save_model_run(mock_save_model_run):

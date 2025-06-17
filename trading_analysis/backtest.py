@@ -198,6 +198,28 @@ def analyze_backtest(trades, final_balance, initial_balance):
         "trades": trades,
     }
 
+def convert_trades_to_dicts(trades):
+    result = []
+    for t in trades:
+        if len(t) >= 3:
+            action, ts, price = t[:3]
+            pnl = t[3] if len(t) >= 4 else None
+            side = None
+            qty = None
+            # определяем сторону и qty по типу сделки
+            if "LONG" in action:
+                side = "long"
+            elif "SHORT" in action:
+                side = "short"
+            result.append({
+                "timestamp": pd.to_datetime(ts),
+                "action": action,
+                "side": side,
+                "price": float(price),
+                "qty": float(t[4].get("qty") if len(t) == 5 and isinstance(t[4], dict) and "qty" in t[4] else 0)
+            })
+    return result
+
 def _print_backtest_results(trades, final_balance, symbol, result):
 
     print(f"\n>>> Результат бэктеста по {symbol} <<<")
@@ -400,7 +422,7 @@ def run_backtest(df, symbol=None, leverage=1.0, initial_balance=1000.0,
         _finalize_position(state, df)
 
     result = analyze_backtest(state["trades"], state["balance"], initial_balance)
-
+    result["trades"] = convert_trades_to_dicts(state["trades"])
     if report:
         _save_and_report(df, state, symbol, initial_balance, result)
 

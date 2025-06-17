@@ -2,18 +2,34 @@
 import json
 import time
 from datetime import datetime, timezone, timedelta
+from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from trading_analysis.bybit_api import find_first_kline_timestamp, get_bybit_kline
-from trading_analysis.models import Base, Candle, ModelRun
+from trading_analysis.models import Base, Candle, ModelRun, TradeLog
 
 engine = create_engine("sqlite:///market_data.db", echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+from contextlib import contextmanager
+
+@contextmanager
+def get_session():
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 def init_db():
     Base.metadata.create_all(engine)
@@ -229,26 +245,47 @@ def convert_np(obj):
         return {k: convert_np(v) for k, v in obj.items()}
     return obj
 
-def save_model_run(symbol, interval, date, params, loss, pnl, total_trades, winrate, risk_pct, retrained, triggered_restart):
-    session = SessionLocal()
-    params_clean = convert_np(params)
+def save_model_run(**kwargs):
+    required_keys = [
+        "symbol", "interval", "date", "params", "loss", "pnl",
+        "total_trades", "winrate", "risk_pct", "retrained",
+        "triggered_restart", "session_uuid", "balance", "best_params"
+    ]
+    for key in required_keys:
+        if key not in kwargs:
+            raise ValueError(f"Missing required key: {key}")
+
+    trades = kwargs.pop("trades", [])
 
     run = ModelRun(
-        symbol=symbol,
-        interval=interval,
-        date=date,
-        params_json=json.dumps(params_clean),
-        loss=loss,
-        pnl=pnl,
-        total_trades=total_trades,
-        winrate=winrate,
-        risk_pct=risk_pct,
-        retrained=retrained,
-        triggered_restart=triggered_restart
+        session_uuid=kwargs["session_uuid"],
+        symbol=kwargs["symbol"],
+        interval=kwargs["interval"],
+        date=kwargs["date"],
+        best_params=json.dumps(kwargs["best_params"]),
+        balance=kwargs["balance"],
+        loss=kwargs["loss"],
+        pnl=kwargs["pnl"],
+        total_trades=kwargs["total_trades"],
+        winrate=kwargs["winrate"],
+        risk_pct=kwargs["risk_pct"],
+        retrained=kwargs["retrained"],
+        triggered_restart=kwargs["triggered_restart"]
     )
-    session.add(run)
-    session.commit()
-    session.close()
+
+    with get_session() as session:
+        session.add(run)
+        for trade in trades:
+            trade_row = TradeLog(
+                session_uuid=kwargs["session_uuid"],
+                symbol=kwargs["symbol"],
+                timestamp=trade["timestamp"],
+                action=trade["action"],
+                side=trade.get("side"),
+                price=trade.get("price"),
+                qty=trade.get("qty")
+            )
+            session.add(trade_row)
     
 def get_first_candle_from_db(symbol: str, interval: str = "30") -> pd.Series:
     """

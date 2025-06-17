@@ -163,6 +163,6 @@ def test_position_carries_over_between_windows():
     )
 
     assert state2["position_type"] is None, "Позиция должна быть закрыта"
-    closed_trades = [t for t in result2["trades"] if t[0].startswith("AUTO SELL")]
+    closed_trades = [t for t in result2["trades"] if t["action"].startswith("AUTO SELL")]
     assert len(closed_trades) == 1, "Ожидается один завершённый трейд"
     assert result2["pnl"] > 0, "Должна быть прибыль после TP"

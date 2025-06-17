@@ -15,6 +15,8 @@ from strategy.objective import estimate_window_size_from_params, optimize_with_v
 from strategy.search_space import search_space
 from trading_analysis.utils import prepare_params_for_logging, sanitize_params, split_train_val
 
+from uuid import uuid4
+
 verbose = False
 
 def initialize_test(symbol: str, interval: str = "30") -> dict:
@@ -46,6 +48,7 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
         "risk_history": [],
         "search_space": search_space,
         "open_position": None,
+        "session_uuid": str(uuid4())
     }
 
 def load_initial_train_data(symbol: str, window_size: int, start_timestamp: int, interval: str):
@@ -191,37 +194,40 @@ def update_tracking(config: dict, interval, result: dict, df_test, df_test_prepa
     :param df_test: оригинальный DataFrame теста (без индикаторов)
     :param df_test_prepared: подготовленный DataFrame теста (с индикаторами)
     """
-    trade_log = config["trade_log"]
-    symbol = config["symbol"]
-    risk_pct = config["risk_pct"]
-    best_params = config["best_params"]
-    balance = config["balance"]
-    retrained = result.get("pnl", 0) <= 0
+    trade_log = config.get("trade_log", [])
     days_elapsed = config.get("days_elapsed", 0) + 1
-
     test_date = df_test_prepared.index[0].to_pydatetime()
 
+    # Обновляем трейдлог
     trade_log.append({
         "date": test_date.strftime("%Y-%m-%d"),
         "pnl": result["pnl"]
     })
-    params_clean = prepare_params_for_logging(config["best_params"], config)
-    save_model_run(
-        symbol=symbol,
-        interval=interval,
-        date=test_date,
-        params=params_clean,
-        loss=-result["winrate"],
-        pnl=result["pnl"],
-        total_trades=result["total_trades"],
-        winrate=result["winrate"],
-        risk_pct=risk_pct,
-        retrained=retrained,
-        triggered_restart=triggered_restart
-    )
+
+    # Компактное логирование
+    log_entry = {
+        "symbol": config["symbol"],
+        "interval": interval,
+        "date": test_date,
+        "params": prepare_params_for_logging(config["best_params"], config),
+        "loss": -result["winrate"],
+        "pnl": result["pnl"],
+        "total_trades": result["total_trades"],
+        "winrate": result["winrate"],
+        "risk_pct": config["risk_pct"],
+        "retrained": result.get("pnl", 0) <= 0,
+        "triggered_restart": triggered_restart,
+        "session_uuid": config.get("session_uuid"),
+        "balance": config["balance"],
+        "best_params": config["best_params"],
+        "trades": result.get("trades", [])
+    }
+
+    save_model_run(**log_entry)
 
     config["trade_log"] = trade_log
     config["days_elapsed"] = days_elapsed
+
 
 def update_training_window(df_train, df_test, step_candles):
     """

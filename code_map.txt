@@ -196,75 +196,88 @@ File: trading_analysis/feature_selection.py
     calls → select_important_features
 
 File: trading_analysis/signals.py
+  def register_signal()
+  def long_macd()
+    calls → (df['MACD'] > df['Signal']) & (df['MACD'].shift(1) <= df['Signal'].shift(1)) & (df['MACD'] > 0).astype
+    calls → df['MACD'].shift
+    calls → df['Signal'].shift
+    calls → pd.Series
+    calls → register_signal
+  def short_macd()
+    calls → (df['MACD'] < df['Signal']) & (df['MACD'].shift(1) >= df['Signal'].shift(1)) & (df['MACD'] < 0).astype
+    calls → df['MACD'].shift
+    calls → df['Signal'].shift
+    calls → pd.Series
+    calls → register_signal
+  def long_rsi()
+    calls → (df['RSI'] > 45) & (df['RSI'] < 75).astype
+    calls → pd.Series
+    calls → register_signal
+  def short_rsi()
+    calls → df['RSI'] < 35.astype
+    calls → register_signal
+  def long_roc()
+    calls → df['ROC'] > 1.astype
+    calls → pd.Series
+    calls → register_signal
+  def short_roc()
+    calls → df['ROC'] < -1.astype
+    calls → pd.Series
+    calls → register_signal
+  def short_mfi()
+    calls → df['MFI'] > 70.astype
+    calls → register_signal
+  def short_cci()
+    calls → df['CCI'] > 100.astype
+    calls → register_signal
+  def short_bb_rebound()
+    calls → df['close'] > df['BBM'].astype
+    calls → register_signal
+  def short_below_ema9()
+    calls → df['close'] < df['EMA_9'].astype
+    calls → register_signal
+  def short_donchian()
+    calls → df['close'] < df['low'].rolling(20, min_periods=1).min().astype
+    calls → df['low'].rolling
+    calls → df['low'].rolling(20, min_periods=1).min
+    calls → register_signal
+  def short_tema_cross()
+    calls → df['TEMA_9'] < df['TEMA_21'].astype
+    calls → register_signal
+  def short_stochrsi()
+    calls → (df['StochRSI_K'] > 80) & (df['StochRSI_D'] > 80).astype
+    calls → register_signal
   def generate_signals_cached()
     calls → generate_signals
     calls → isinstance
     calls → json.loads
-  def safe_assign()
-    calls → series.astype
+  def long_volume_above_avg()
+    calls → df.get
+    calls → df['volume'] > df.get('Volume_SMA_20', df['volume']).astype
+    calls → register_signal
   def generate_signals()
-    calls → (df['MACD'] < df['Signal']) & (df['MACD'].shift(1) >= df['Signal'].shift(1)) & (df['MACD'] < 0) & (df['Signal'] < 0).astype
-    calls → (df['MACD'] > df['Signal']) & (df['MACD'].shift(1) <= df['Signal'].shift(1)) & (df['MACD'] > 0).astype
-    calls → (df['RSI'] > 45) & (df['RSI'] < 75).astype
-    calls → (df['StochRSI_K'] < 20) & (df['StochRSI_K'] > df['StochRSI_D']).astype
-    calls → (df['StochRSI_K'] > 80) & (df['StochRSI_K'] < df['StochRSI_D']).astype
-    calls → (df['volume'] - df['volume'].rolling(20).mean()) / df['volume'].rolling(20).std().fillna
+    calls → LONG_SIGNAL_FUNCS[name]
+    calls → SHORT_SIGNAL_FUNCS[name]
     calls → df.copy
-    calls → df['ADX'] > 20.astype
-    calls → df['ATR'] > df['ATR'].rolling(50).mean().astype
+    calls → df.get
+    calls → df.get('BBP', 0) > 0.5.astype
+    calls → df.get('EMA_200').diff
+    calls → df.get('EMA_200').diff() < 0 if 'EMA_200' in df else False.astype
+    calls → df['ATR'] > df['ATR'].rolling(50).mean() if 'ATR' in df else pd.Series(False, index=df.index).astype
     calls → df['ATR'].rolling
     calls → df['ATR'].rolling(50).mean
-    calls → df['BBP'] > 0.5.astype
-    calls → df['CCI'] < -100.astype
-    calls → df['CCI'] > 100.astype
-    calls → df['EMA_200'].diff
-    calls → df['EMA_200'].diff() < 0.astype
-    calls → df['EMA_9'] < df['EMA_21'].astype
-    calls → df['EMA_9'] > df['EMA_21'].astype
-    calls → df['MACD'].shift
-    calls → df['MFI'] < 30.astype
-    calls → df['MFI'] > 70.astype
-    calls → df['ROC'] < -1.astype
-    calls → df['ROC'] > 1.astype
-    calls → df['RSI'] < 50.astype
-    calls → df['Signal'].shift
-    calls → df['TEMA_9'] < df['TEMA_21'].astype
-    calls → df['TEMA_9'] > df['TEMA_21'].astype
-    calls → df['close'] < df['EMA_200'].astype
-    calls → df['close'] < df['EMA_9'].astype
-    calls → df['close'] < donchian_low.shift(1).astype
-    calls → df['close'] > df['BBM'].astype
-    calls → df['close'] > df['EMA_200'].astype
-    calls → df['close'] > donchian_high.shift(1).astype
-    calls → df['high'].rolling
-    calls → df['high'].rolling(window=20).max
-    calls → df['low'].rolling
-    calls → df['low'].rolling(window=20).min
-    calls → df['volume'] > df['Volume_SMA_20'].astype
+    calls → df['volume'] > df.get('Volume_SMA_20', df['volume']).astype
     calls → df['volume'] > df['volume'].rolling(10).max().shift(1).astype
     calls → df['volume'].rolling
     calls → df['volume'].rolling(10).max
     calls → df['volume'].rolling(10).max().shift
-    calls → df['volume'].rolling(20).mean
-    calls → df['volume'].rolling(20).std
-    calls → df['volume_zscore'] > 2.astype
-    calls → donchian_high.shift
-    calls → donchian_low.shift
-    calls → len
+    calls → list
     calls → p
     calls → params.get
     calls → pd.Series
-    calls → signal.split
+    calls → print
+    calls → signal_series.sum
     calls → sum
-    calls → ta.adx
-    calls → ta.atr
-    calls → ta.cci
-    calls → ta.mfi
-    calls → ta.roc
-    calls → ta.stochrsi
-    calls → ta.tema
-    calls → warnings.catch_warnings
-    calls → warnings.simplefilter
 
 File: trading_analysis/indicators.py
   def safe_assign_ema()
@@ -272,14 +285,22 @@ File: trading_analysis/indicators.py
     calls → isinstance
   def calculate_indicators()
     calls → df.astype
-    calls → df.ta.atr
-    calls → df.ta.bbands
-    calls → df.ta.macd
-    calls → df.ta.rsi
+    calls → df.copy
     calls → df['volume'].rolling
     calls → df['volume'].rolling(window=20, min_periods=1).mean
-    calls → pd.concat
-    calls → safe_assign_ema
+    calls → ta.adx
+    calls → ta.atr
+    calls → ta.bbands
+    calls → ta.cci
+    calls → ta.ema
+    calls → ta.macd
+    calls → ta.mfi
+    calls → ta.roc
+    calls → ta.rsi
+    calls → ta.stochrsi
+    calls → ta.tema
+    calls → warnings.catch_warnings
+    calls → warnings.simplefilter
   def calculate_indicators_cached()
     calls → calculate_indicators
     calls → memory.cache
@@ -336,7 +357,7 @@ File: trading_analysis/db.py
     calls → session.close
     calls → session.query
     calls → session.query(func.max(Candle.timestamp)).filter
-    calls → session.query(func.max(Candle.timestamp)).filter(Candle.symbol == symbol).scalar
+    calls → session.query(func.max(Candle.timestamp)).filter(Candle.symbol == symbol, Candle.interval == interval).scalar
   def fetch_and_save_all_ohlcv()
     calls → datetime.now
     calls → datetime.now(timezone.utc).timestamp
@@ -392,6 +413,10 @@ File: trading_analysis/db.py
     calls → session.close
     calls → session.execute
     calls → session.execute(stmt).scalar_one_or_none
+  def ensure_data_loaded()
+    calls → init_db
+    calls → print
+    calls → safe_check_ohlcv_integrity
 
 File: trading_analysis/charts.py
   def plot_volume()
@@ -531,6 +556,38 @@ File: trading_analysis/tests/test_risk.py
     calls → abs
     calls → calculate_position_size
 
+File: trading_analysis/tests/test_signals_sanity.py
+  def test_signals_have_at_least_some_entries()
+    calls → calculate_indicators
+    calls → generate_signals
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → pd.DataFrame
+    calls → pd.DataFrame({'timestamp': pd.date_range('2024-01-01', periods=200, freq='30min'), 'open': np.random.rand(200) * 100, 'high': np.random.rand(200) * 100 + 10, 'low': np.random.rand(200) * 100, 'close': np.random.rand(200) * 100, 'volume': np.random.randint(1000, 10000, 200)}).set_index
+    calls → pd.date_range
+    calls → signals['long_entry'].sum
+    calls → signals['short_entry'].sum
+
+File: trading_analysis/tests/test_indicators.py
+  def test_calculate_indicators_outputs_valid_data()
+    calls → calculate_indicators
+    calls → np.random.rand
+    calls → np.random.randint
+    calls → pd.DataFrame
+    calls → pd.DataFrame({'timestamp': pd.date_range('2024-01-01', periods=300, freq='30min'), 'open': np.random.rand(300) * 100, 'high': np.random.rand(300) * 100 + 100, 'low': np.random.rand(300) * 100, 'close': np.random.rand(300) * 100, 'volume': np.random.randint(1000, 10000, 300)}).set_index
+    calls → pd.date_range
+    calls → print
+    calls → recent.isnull
+    calls → recent.isnull().any
+    calls → recent.isnull().any().any
+    calls → recent.isnull().sum
+    calls → result['EMA_9'].var
+    calls → result['RSI'].dropna
+    calls → rsi_clean <= 100.all
+    calls → rsi_clean >= 0.all
+    calls → rsi_clean.max
+    calls → rsi_clean.min
+
 File: trading_analysis/tests/test_backtest.py
   def make_long_test_df()
     calls → pd.DataFrame
@@ -577,9 +634,11 @@ File: trading_analysis/tests/test_signals.py
     calls → pd.DataFrame
     calls → range
   def test_generate_signals_basic_long()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
   def test_macd_signal_generation()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
     calls → len
@@ -590,32 +649,43 @@ File: trading_analysis/tests/test_signals.py
     calls → pd.DataFrame
     calls → pytest.raises
   def test_threshold_param_affects_entry()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
     calls → result['long_entry'].sum
   def test_stochrsi_none()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
     calls → monkeypatch.setattr
-    calls → result['StochRSI_K'].isna
-    calls → result['StochRSI_K'].isna().all
+  def test_stochrsi_present()
+    calls → calculate_indicators
+    calls → df['StochRSI_K'].isna
+    calls → df['StochRSI_K'].isna().sum
+    calls → len
+    calls → np.random.uniform
+    calls → pd.DataFrame
   def test_custom_long_signals_only_volume()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
-    calls → result['long_score'] == result['volume_above_avg'].all
+    calls → result['long_score'] == result['long_volume_above_avg'].all
     calls → result['long_score'].unique
     calls → set
     calls → set(result['long_score'].unique()).issubset
   def test_generate_signals_short_entry()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
     calls → len
     calls → np.linspace
   def test_trend_strength_filter_blocks_entry()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
     calls → result['long_entry'].sum
   def test_short_entry_from_roc_only()
+    calls → calculate_indicators
     calls → generate_signals
     calls → get_minimal_test_df
     calls → len
@@ -666,11 +736,23 @@ File: trading_analysis/tests/test_feature_selection.py
     calls → pd.DataFrame
     calls → select_important_features
 
+File: trading_analysis/tests/test_data_freshness.py
+  def test_latest_candle_not_too_old()
+    calls → datetime.fromtimestamp
+    calls → datetime.now
+    calls → dt.isoformat
+    calls → ensure_data_loaded
+    calls → get_latest_timestamp
+    calls → print
+    calls → pytest.mark.skipif
+    calls → pytest.skip
+    calls → timedelta
+
 File: strategy/objective.py
   def prepare_data()
     calls → calculate_indicators_cached
     calls → df.copy
-    calls → generate_signals_cached
+    calls → generate_signals
     calls → hash_dataframe
     calls → strip_indicators
   def optimize_with_validation()
@@ -744,12 +826,14 @@ File: strategy/walkforward.py
   def prepare_test_data()
     calls → calculate_indicators_cached
     calls → col.startswith
+    calls → df_full[target_col].value_counts
     calls → generate_signals_cached
     calls → hash_dataframe
     calls → json.dumps
     calls → len
     calls → pd.concat
     calls → print
+    calls → s.replace
     calls → sanitize_params
     calls → select_important_features
   def run_evaluation()
@@ -779,18 +863,19 @@ File: strategy/walkforward.py
     calls → print
   def initialize_best_params()
     calls → calculate_indicators_cached
+    calls → col.endswith
     calls → col.startswith
     calls → config.update
-    calls → generate_signals_cached
+    calls → df_full['long_entry'].value_counts
+    calls → df_full[['long_score', 'atr_filter', 'long_entry']].tail
+    calls → df_full[[col for col in df_full.columns if col.startswith('long_') and (not col.endswith('_score')) and (not col.endswith('_entry'))]].sum
+    calls → generate_signals
     calls → hash_dataframe
-    calls → json.dumps
     calls → optimize_with_validation
     calls → pd.concat
     calls → print
+    calls → s.replace
     calls → select_important_features
-  def try_prepare_test_data()
-    calls → prepare_test_data
-    calls → print
   def update_window_size()
     calls → abs
     calls → estimate_window_size_from_params
@@ -811,12 +896,12 @@ File: strategy/walkforward.py
     calls → initialize_test
     calls → load_initial_train_data
     calls → plot_backtest_progress
+    calls → prepare_test_data
     calls → print
     calls → reoptimize_strategy
     calls → run_evaluation
     calls → should_trigger_restart
     calls → split_train_val
-    calls → try_prepare_test_data
     calls → update_tracking
     calls → update_training_window
     calls → update_window_size
