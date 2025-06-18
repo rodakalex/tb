@@ -19,6 +19,7 @@ File: trading_analysis/analyze.py
 File: trading_analysis/models.py
   class Candle
   class ModelRun
+  class TradeLog
 
 File: trading_analysis/risk.py
   def calculate_position_size()
@@ -58,6 +59,13 @@ File: trading_analysis/backtest.py
     calls → max_streak
     calls → print
     calls → sum
+  def convert_trades_to_dicts()
+    calls → float
+    calls → isinstance
+    calls → len
+    calls → pd.to_datetime
+    calls → result.append
+    calls → t[4].get
   def _print_backtest_results()
     calls → len
     calls → min
@@ -105,6 +113,7 @@ File: trading_analysis/backtest.py
     calls → _save_and_report
     calls → _try_open_position
     calls → analyze_backtest
+    calls → convert_trades_to_dicts
     calls → df.iterrows
     calls → open_position.get
     calls → print
@@ -312,6 +321,11 @@ File: trading_analysis/cache.py
 File: trading_analysis/__init__.py
 
 File: trading_analysis/db.py
+  def get_session()
+    calls → SessionLocal
+    calls → session.close
+    calls → session.commit
+    calls → session.rollback
   def init_db()
     calls → Base.metadata.create_all
   def save_ohlcv_to_db()
@@ -394,12 +408,13 @@ File: trading_analysis/db.py
     calls → obj.items
   def save_model_run()
     calls → ModelRun
-    calls → SessionLocal
-    calls → convert_np
+    calls → TradeLog
+    calls → ValueError
+    calls → get_session
     calls → json.dumps
+    calls → kwargs.pop
     calls → session.add
-    calls → session.close
-    calls → session.commit
+    calls → trade.get
   def get_first_candle_from_db()
     calls → Candle.timestamp.asc
     calls → SessionLocal
@@ -568,6 +583,25 @@ File: trading_analysis/tests/test_signals_sanity.py
     calls → signals['long_entry'].sum
     calls → signals['short_entry'].sum
 
+File: trading_analysis/tests/test_db.py
+  def test_save_model_run_creates_record()
+    calls → SessionLocal
+    calls → json.dumps
+    calls → pd.to_datetime
+    calls → save_model_run
+    calls → session.close
+    calls → session.commit
+    calls → session.delete
+    calls → session.query
+    calls → session.query(ModelRun).filter_by
+    calls → session.query(ModelRun).filter_by(session_uuid=session_uuid).first
+    calls → str
+    calls → uuid4
+  def test_save_model_run_requires_session_uuid()
+    calls → pd.to_datetime
+    calls → pytest.raises
+    calls → save_model_run
+
 File: trading_analysis/tests/test_indicators.py
   def test_calculate_indicators_outputs_valid_data()
     calls → calculate_indicators
@@ -626,6 +660,7 @@ File: trading_analysis/tests/test_backtest.py
     calls → len
     calls → pd.DataFrame
     calls → run_backtest
+    calls → t['action'].startswith
     calls → t[0].startswith
 
 File: trading_analysis/tests/test_signals.py
@@ -811,6 +846,8 @@ File: strategy/walkforward.py
     calls → get_first_candle_from_db
     calls → int
     calls → last_candle.timestamp.timestamp
+    calls → str
+    calls → uuid4
   def load_initial_train_data()
     calls → load_ohlcv_from_db
   def is_end_of_data()
@@ -914,7 +951,9 @@ File: strategy/tests/test_walkforward.py
     calls → patch
     calls → pd.DataFrame
     calls → pd.to_datetime
+    calls → str
     calls → update_tracking
+    calls → uuid4
   def test_update_tracking_calls_save_model_run()
     calls → isinstance
     calls → len

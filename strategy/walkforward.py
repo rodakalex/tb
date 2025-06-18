@@ -4,7 +4,6 @@ import pandas as pd
 
 from strategy.utils_hashing import hash_dataframe
 from trading_analysis.db import get_first_candle_from_db, load_ohlcv_from_db, save_model_run
-from trading_analysis.feature_selection import select_important_features
 from trading_analysis.indicators import calculate_indicators_cached
 from trading_analysis.risk import calculate_inverse_balance_risk
 from trading_analysis.signals import generate_signals, generate_signals_cached
@@ -33,7 +32,7 @@ def initialize_test(symbol: str, interval: str = "30") -> dict:
     return {
         "symbol": symbol,
         "interval": interval,
-        "window_size": 2000,
+        "window_size": 1000,
         "step_candles": step_candles,
         "ms_per_candle": ms_per_candle,
         "first_ts": first_ts,
@@ -118,6 +117,8 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
     и возвращает подготовленные данные только для тестового окна.
     """
     df_full = pd.concat([df_train, df_test])
+    df_full = df_full[~df_full.index.duplicated(keep="last")]  # 💡 FIX HERE
+
     sanitized_params = sanitize_params(best_params)
 
     df_hash = hash_dataframe(df_full)
@@ -125,28 +126,6 @@ def prepare_test_data(df_train: pd.DataFrame, df_test: pd.DataFrame, best_params
 
     df_full = calculate_indicators_cached(df_hash, df_full, sanitized_params)
     df_full = generate_signals_cached(df_full, params_serialized)
-
-    # 🔍 Отбор признаков, если они ещё не заданы
-    if "enabled_long_signals" not in best_params or "enabled_short_signals" not in best_params:
-        print("🧠 Отбираем важные признаки с mutual_info_classif...")
-
-        for side in ["long", "short"]:
-            feature_cols = [
-                col for col in df_full.columns
-                if col.startswith(f"{side}_") and "_score" not in col and "_entry" not in col
-            ]
-            target_col = f"{side}_entry"
-            vc = df_full[target_col].value_counts()
-
-            if len(vc) < 2:
-                print(f"⚠️ Недостаточно классов в {target_col} для выбора признаков")
-                selected = []
-            else:
-                selected, _ = select_important_features(df_full, feature_cols, target_col=target_col)
-                selected = [s.replace(f"{side}_", "") for s in selected]
-
-            best_params[f"enabled_{side}_signals"] = selected
-            print(f"📌 Важные {side} признаки:", selected)
 
     return df_full.iloc[-len(df_test):]
 
@@ -165,7 +144,7 @@ def run_evaluation(df_test_prepared, symbol: str, current_balance: float, risk_p
         df_test_prepared,
         symbol=symbol,
         report=True,
-        finalize=False,
+        finalize=True,
         initial_balance=current_balance,
         leverage=1,
         risk_pct=risk_pct,
@@ -305,32 +284,24 @@ def initialize_best_params(config, df_train_raw, df_val_raw):
     df_full = calculate_indicators_cached(df_hash, df_full, dummy_params)
     df_full = generate_signals(df_full, dummy_params)
 
-    feature_cols_long = [col for col in df_full.columns if col.startswith("long_") and "_score" not in col and "_entry" not in col]
-    feature_cols_short = [col for col in df_full.columns if col.startswith("short_") and "_score" not in col and "_entry" not in col]
-    
     if verbose:
         print("long_entry class distribution:")
         print(df_full["long_entry"].value_counts())
-        print(df_full[["long_score", "atr_filter", "long_entry"]].tail(10))
-        print(df_full[[col for col in df_full.columns if col.startswith("long_") and not col.endswith("_score") and not col.endswith("_entry")]].sum())
-
-    important_feats_long, _ = select_important_features(df_full, feature_cols_long, target_col="long_entry")
-    important_feats_long = [s.replace("long_", "") for s in important_feats_long]
-
-    important_feats_short, _ = select_important_features(df_full, feature_cols_short, target_col="short_entry")
-    important_feats_short = [s.replace("short_", "") for s in important_feats_short]
 
     best_params, sharpe_train, sharpe_val = optimize_with_validation(
         df_train_raw, df_val_raw, config["symbol"], search_space,
-        initial_params=None,
-        enabled_long_signals=important_feats_long,
-        enabled_short_signals=important_feats_short
     )
 
     if not best_params:
-        print("⚠ Пропуск дня — стратегия не найдена.")
-        return False
-
+        # 👇 Расширяем временно окно, если стратегия не нашлась
+        if config["window_size"] < 1500:  # ограничим разумной верхней границей
+            config["window_size"] += 500
+            print(f"⚠ Стратегия не найдена — увеличиваем window_size до {config['window_size']} и повторяем попытку.")
+        else:
+            print("⛔ Достигнут предел window_size — пропускаем день.")
+            return False
+        return None  # 🔁 сигнал на повтор с новым окном
+    
     config.update({
         "best_params": best_params,
         "sharpe_train": sharpe_train,
@@ -338,29 +309,10 @@ def initialize_best_params(config, df_train_raw, df_val_raw):
     })
     return True
 
-def update_window_size(config):
-    new_window = estimate_window_size_from_params(config["best_params"], verbose=True)
-
-    if config["sharpe_train"] - config["sharpe_val"] > 1.0:
-        print("⚠️ Переобучение: window_size не обновляем")
-        new_window = config["window_size"]
-
-    max_jump = int(config["window_size"] * 0.3)
-    if abs(new_window - config["window_size"]) > max_jump:
-        print("⚠️ Резкий скачок window_size — отменён")
-        new_window = config["window_size"]
-
-    alpha = 0.3
-    config["window_size"] = int((1 - alpha) * config["window_size"] + alpha * new_window)
-    print(f"📐 Новый window_size: {config['window_size']}")
-
-def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol, triggered_restart=False):
+def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol):
     print("🔁 Переоптимизация из-за серии убыточных дней.")
     best_params, sharpe_train, sharpe_val = optimize_with_validation(
         df_train_raw, df_val_raw, symbol, search_space,
-        initial_params=config["best_params"],
-        enabled_long_signals=config["best_params"]["enabled_long_signals"],
-        enabled_short_signals=config["best_params"]["enabled_short_signals"]
     )
 
     if not best_params:
@@ -375,9 +327,6 @@ def reoptimize_strategy(config, df_train_raw, df_val_raw, symbol, triggered_rest
 
 def should_trigger_restart(result, config) -> bool:
     if result["final_balance"] < config["initial_balance"] * 0.9:
-        return True
-
-    if result["max_loss_streak"] >= 3:
         return True
 
     if result["total_trades"] == 0:
@@ -409,20 +358,47 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         df_train_raw, df_val_raw = split_train_val(df_train)
 
         if not config.get("best_params"):
-            success = initialize_best_params(config, df_train_raw, df_val_raw)
-            if not success:
-                df_train = update_training_window(df_train, df_test, config["step_candles"])
-                continue
+            while True:
+                success = initialize_best_params(config, df_train_raw, df_val_raw)
 
-        df_test_prepared = prepare_test_data(df_train, df_test, config["best_params"])
-        if df_test_prepared is None:
+                if success is True:
+                    break  # Успешно
+                elif success is False:
+                    df_train = update_training_window(df_train, df_test, config["step_candles"])
+
+                    # 💡 Если достигнут предел, сбрасываем window_size на следующий день
+                    if config["window_size"] >= 1500:
+                        config["window_size"] = 1000
+                        print("🔁 Сброс window_size до 500 на следующий день")
+
+                    continue  # вернёмся в основной while
+                else:
+                    print("🔁 Переинициализация обучающего окна...")
+                    df_train = load_initial_train_data(
+                        symbol=config["symbol"],
+                        window_size=config["window_size"],
+                        start_timestamp=config["first_ts"],
+                        interval=interval,
+                    )
+                    df_train_raw, df_val_raw = split_train_val(df_train)
+
+        if config.get("best_params") is None:
+            print("⚠️ best_params отсутствует — пропуск дня.")
             df_train = update_training_window(df_train, df_test, config["step_candles"])
             continue
 
-        update_window_size(config)
+        df_test_prepared = prepare_test_data(df_train, df_test, config["best_params"])
+        if df_test_prepared is None:
+            print("⚠️ Ошибка при подготовке тестового окна — пропуск дня.")
+            df_train = update_training_window(df_train, df_test, config["step_candles"])
+            continue
+
         config["risk_pct"] = calculate_inverse_balance_risk(config["balance"], config["initial_balance"])
 
-        result, config["balance"], config["open_position"] = run_evaluation(df_test_prepared, symbol, config["balance"], config["risk_pct"], open_position=config.get("open_position"))
+        result, config["balance"], config["open_position"] = run_evaluation(
+            df_test_prepared, symbol, config["balance"],
+            config["risk_pct"], open_position=config.get("open_position")
+        )
 
         if config["balance"] < 500:
             plot_backtest_progress(config["trade_log"], title="История поражения")
@@ -432,10 +408,10 @@ def walk_forward_test(symbol="PRIMEUSDT", interval="30"):
         if should_trigger_restart(result, config):
             print("🔁 Условия перезапуска модели выполнены")
             triggered_restart = True
-            reoptimize_strategy(config, df_train_raw, df_val_raw, symbol, triggered_restart)
+            reoptimize_strategy(config, df_train_raw, df_val_raw, symbol)
             config["no_trade_windows"] = 0
-        
-        update_tracking(config, interval, result, df_test, df_test_prepared, triggered_restart=triggered_restart)
+
+        update_tracking(config, interval, result, df_test, df_test_prepared, triggered_restart)
         df_train = update_training_window(df_train, df_test, config["step_candles"])
 
     finalize_walkforward(config)

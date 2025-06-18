@@ -16,7 +16,7 @@ def run_realtime():
 
 if __name__ == "__main__":
     init_db()
-    symbol, interval = 'BTCUSDT', '30'
+    symbol, interval = 'PRIMEUSDT', '30'
     has_data = safe_check_ohlcv_integrity(symbol=symbol, interval=interval)
     if not has_data:
         fetch_and_save_all_ohlcv(symbol=symbol, interval=interval)

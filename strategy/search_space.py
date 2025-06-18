@@ -15,10 +15,10 @@ search_space = {
     "w_tema_cross": hp.quniform("w_tema_cross", 0, 3, 1),
     "long_score_threshold": hp.quniform("long_score_threshold", 2, 4, 1),
     "short_score_threshold": hp.quniform("short_score_threshold", 2, 4, 1),
-    'tp_pct': hp.uniform('tp_pct', 0.01, 0.50),
-    'sl_pct': hp.uniform('sl_pct', 0.005, 0.50),
+    "tp_pct": hp.uniform("tp_pct", 0.01, 0.50),
+    "sl_pct": hp.uniform("sl_pct", 0.005, 0.50),
     "use_dynamic_tp_sl": hp.choice("use_dynamic_tp_sl", [False]),
     "risk_pct": hp.uniform("risk_pct", 0.01, 0.20),
     "use_atr_filter": hp.choice("use_atr_filter", [True, False]),
-    "use_ema200_down_filter": hp.choice("use_ema200_down_filter", [True, False]),
+    "use_smart_trend_filter": hp.choice("use_smart_trend_filter", [True, False]),
 }
